@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BillingStatus, JobStatus, JobPriority, WorkOrder } from '@/shared/types';
-import { Search, Plus, ArrowRight, Activity, Map, Calendar, Bell, CheckCircle2, Clock } from 'lucide-react';
+import { Search, Plus, ArrowRight, Activity, Map, Calendar, CheckCircle2, Clock } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
 import { CreateTicketModal } from '@/features/jobs/components/CreateTicketModal';
+import { InAppNotifications, NotificationBellButton } from '@/features/jobs/components/InAppNotifications';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { useResources } from '@/features/resources/state/ResourceContext';
@@ -15,6 +16,8 @@ export const DesktopDashboard: React.FC = () => {
   const { getCustomerById, technicians } = useResources();
   const navigate = useNavigate();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
   
   // Workflow Counts
   const unscheduledCount = jobs.filter(j => j.status === JobStatus.OPEN).length;
@@ -40,10 +43,24 @@ export const DesktopDashboard: React.FC = () => {
                   className="pl-10 pr-4 bg-slate-50 border-transparent rounded-full text-sm focus-visible:bg-white focus-visible:border-docuraft-border focus-visible:ring-1 focus-visible:ring-docuraft-navy/20 w-64 transition-all h-10"
                 />
             </div>
-            <Button variant="ghost" size="icon" className="rounded-full relative hidden sm:flex text-slate-500 hover:text-slate-700 hover:bg-slate-50">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </Button>
+            <div className="relative hidden sm:block">
+              <NotificationBellButton
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                buttonRef={notificationButtonRef}
+                className="rounded-full relative flex items-center justify-center w-10 h-10 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                ariaExpanded={isNotificationsOpen}
+                ariaControls="desktop-notifications-panel"
+                iconClassName="w-5 h-5"
+              />
+              <InAppNotifications
+                open={isNotificationsOpen}
+                onOpenChange={setIsNotificationsOpen}
+                variant="desktop-dropdown"
+                anchor="topbar"
+                panelId="desktop-notifications-panel"
+                triggerRef={notificationButtonRef}
+              />
+            </div>
             <div className="hidden sm:block h-8 w-px bg-gray-200 mx-1"></div>
             <Button 
                 onClick={() => setIsCreateModalOpen(true)}

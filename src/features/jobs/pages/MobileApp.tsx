@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { WorkOrderCard } from '@/features/jobs/components/WorkOrderCard';
 import { JobStatus, JobType, JobPriority } from '@/shared/types';
-import { Bell, Search, MapPin, Clock, ChevronRight, AlertCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
+import { Search, MapPin, Clock, ChevronRight, AlertCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
 import { TranslationKey } from '@/shared/i18n/translations';
 import { useResources } from '@/features/resources/state/ResourceContext';
 import { useAuth } from '@/features/auth/state/AuthContext';
+import { InAppNotifications, NotificationBellButton } from '@/features/jobs/components/InAppNotifications';
 
 interface MobileAppProps {
   isSimulator: boolean;
@@ -14,10 +15,12 @@ interface MobileAppProps {
 
 export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { t, language } = useLanguage();
   const { jobs, updateJob, completeForBilling } = useJobs();
   const { getCustomerById, getAssetById } = useResources();
   const { profile } = useAuth();
+  const notificationButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const fieldJobs = jobs.filter((job) => job.job_type !== JobType.WORKSHOP);
 
@@ -104,9 +107,14 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
                   .slice(0, 2)
                   .toUpperCase()}
               </div>
-              <button className="p-2 bg-white rounded-full shadow-sm border border-gray-100 active:scale-95 transition-transform">
-                <Bell className="w-5 h-5 text-slate-800" />
-              </button>
+              <NotificationBellButton
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                buttonRef={notificationButtonRef}
+                className="p-2 bg-white rounded-full shadow-sm border border-gray-100 active:scale-95 transition-transform relative"
+                iconClassName="w-5 h-5 text-slate-800"
+                ariaExpanded={isNotificationsOpen}
+                ariaControls="field-mobile-notifications-panel"
+              />
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('mobile.my_day')}</h1>
             <p className="text-slate-500 font-medium capitalize flex items-center gap-2">
@@ -198,6 +206,14 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
           </div>
         </div>
       )}
+      <InAppNotifications
+        open={isNotificationsOpen}
+        onOpenChange={setIsNotificationsOpen}
+        variant="mobile-sheet"
+        anchor="mobile-header"
+        panelId="field-mobile-notifications-panel"
+        triggerRef={notificationButtonRef}
+      />
     </div>
   );
 };

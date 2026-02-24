@@ -2,11 +2,11 @@ import React, { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AuthPage } from '@/features/auth/pages/AuthPage';
+import { SignupPage } from '@/features/auth/pages/SignupPage';
 import { AuthConfigErrorPage } from '@/features/auth/pages/AuthConfigErrorPage';
 import { ProfileLoadErrorPage } from '@/features/auth/pages/ProfileLoadErrorPage';
 import { RequireRole } from '@/features/auth/guards/RequireRole';
 import { useAuth } from '@/features/auth/state/AuthContext';
-import { InAppNotifications } from '@/features/jobs/components/InAppNotifications';
 import { OfflineSyncBanner } from '@/features/jobs/components/OfflineSyncBanner';
 import { UserRole } from '@/shared/types';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -21,7 +21,7 @@ const PageLoader = () => {
 };
 
 export const AppRouter: React.FC = () => {
-  const { authState, loading, profile, profileError, retryProfileLoad, runtimeAuthMode, signOut } = useAuth();
+  const { authState, loading, profile, activeRole, profileError, retryProfileLoad, runtimeAuthMode, signOut } = useAuth();
 
   React.useEffect(() => {
     if (authState === 'authenticated' && !profile) {
@@ -45,6 +45,7 @@ export const AppRouter: React.FC = () => {
     return (
       <Routes>
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -59,12 +60,12 @@ export const AppRouter: React.FC = () => {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to={profile.role === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />}
+          element={<Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />}
         />
 
         <Route
           path="/login"
-          element={<Navigate to={profile.role === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />}
+          element={<Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />}
         />
 
         <Route
@@ -93,7 +94,6 @@ export const AppRouter: React.FC = () => {
       </Routes>
 
       <OfflineSyncBanner />
-      <InAppNotifications />
 
       <Suspense fallback={null}>
         <AIAssistant />
