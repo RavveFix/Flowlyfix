@@ -1,8 +1,0 @@
-{
-  "name": "Flowly",
-  "description": "A robust Field Service Management (FSM) SaaS platform for technicians to manage work orders, machines, and customers.",
-  "requestFramePermissions": [
-    "microphone",
-    "geolocation"
-  ]
-}
