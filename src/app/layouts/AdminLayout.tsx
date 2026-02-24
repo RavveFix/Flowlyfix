@@ -17,6 +17,8 @@ import {
 
 import { useAuth } from '@/features/auth/state/AuthContext';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
+import { runtimeConfig } from '@/shared/config/runtime';
+import { UserRole } from '@/shared/types';
 
 const DesktopDashboard = lazy(() =>
   import('@/features/jobs/pages/DesktopDashboard').then((mod) => ({ default: mod.DesktopDashboard })),
@@ -36,11 +38,13 @@ interface NavItemDef {
   to: string;
   label: string;
   icon: React.ReactNode;
+  testId: string;
 }
 
 interface NavItemProps {
   icon: React.ReactNode;
   label: string;
+  testId: string;
   active?: boolean;
   onClick?: () => void;
 }
@@ -49,9 +53,10 @@ interface AdminLayoutProps {
   onSignOut: () => Promise<void>;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick }) => (
+const NavItem: React.FC<NavItemProps> = ({ icon, label, testId, active, onClick }) => (
   <button
     onClick={onClick}
+    data-testid={testId}
     className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-all duration-200 group relative ${
       active ? 'bg-slate-800 text-white font-medium' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
     }`}
@@ -71,25 +76,49 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  const { profile } = useAuth();
+  const { authState, profile, runtimeAuthMode } = useAuth();
+  const showAuthDebug = Boolean((import.meta as any).env?.DEV) && runtimeConfig.authDebugEnabled;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const navItems = useMemo<NavItemDef[]>(
     () => [
-      { to: '/admin/dashboard', label: t('nav.dashboard'), icon: <LayoutDashboard size={18} /> },
-      { to: '/admin/dispatch', label: t('nav.dispatch'), icon: <Truck size={18} /> },
-      { to: '/admin/workshop', label: t('nav.workshop'), icon: <Wrench size={18} /> },
-      { to: '/admin/billing', label: t('nav.billing'), icon: <Receipt size={18} /> },
-      { to: '/admin/customers', label: t('nav.customers'), icon: <Users size={18} /> },
-      { to: '/admin/resources', label: t('nav.resources'), icon: <Box size={18} /> },
-      { to: '/admin/settings', label: t('nav.settings'), icon: <Settings size={18} /> },
+      { to: '/admin/dashboard', label: t('nav.dashboard'), icon: <LayoutDashboard size={18} />, testId: 'nav-dashboard' },
+      { to: '/admin/dispatch', label: t('nav.dispatch'), icon: <Truck size={18} />, testId: 'nav-dispatch' },
+      { to: '/admin/workshop', label: t('nav.workshop'), icon: <Wrench size={18} />, testId: 'nav-workshop' },
+      { to: '/admin/billing', label: t('nav.billing'), icon: <Receipt size={18} />, testId: 'nav-billing' },
+      { to: '/admin/customers', label: t('nav.customers'), icon: <Users size={18} />, testId: 'nav-customers' },
+      { to: '/admin/resources', label: t('nav.resources'), icon: <Box size={18} />, testId: 'nav-resources' },
+      { to: '/admin/settings', label: t('nav.settings'), icon: <Settings size={18} />, testId: 'nav-settings' },
     ],
     [t],
+  );
+
+  const hasBillingNav = useMemo(
+    () => navItems.some((item) => item.to === '/admin/billing' && item.testId === 'nav-billing'),
+    [navItems],
   );
 
   React.useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (!((import.meta as any).env?.DEV)) {
+      return;
+    }
+
+    if (profile?.role !== UserRole.ADMIN) {
+      return;
+    }
+
+    if (!hasBillingNav) {
+      console.error('[runtime] Admin nav invariant failed: nav-billing missing', {
+        appInstanceId: runtimeConfig.appInstanceId,
+        runtimeAuthMode,
+        currentOrigin: window.location.origin,
+      });
+    }
+  }, [hasBillingNav, profile?.role, runtimeAuthMode]);
 
   return (
     <div className="h-screen bg-docuraft-bg flex font-sans text-slate-900 overflow-hidden relative">
@@ -109,7 +138,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
             <div className="w-8 h-8 rounded bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center font-bold text-white shadow-lg mr-3">
               F
             </div>
-            <h1 className="text-lg font-bold tracking-tight text-white">Flowly</h1>
+            <h1 className="text-lg font-bold tracking-tight text-white">Flowlyfix</h1>
           </div>
           <button className="lg:hidden text-slate-400 p-1" onClick={() => setIsMobileMenuOpen(false)}>
             <LogOut size={20} />
@@ -122,6 +151,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
               key={item.to}
               icon={item.icon}
               label={item.label}
+              testId={item.testId}
               active={location.pathname === item.to}
               onClick={() => navigate(item.to)}
             />
@@ -169,6 +199,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
               <LogOut size={16} />
             </button>
           </div>
+
+          {showAuthDebug && (
+            <div className="mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-[10px] text-slate-400" data-testid="auth-debug">
+              {`instance:${runtimeConfig.appInstanceId} origin:${window.location.origin} auth:${authState} mode:${runtimeAuthMode} role:${profile?.role ?? '-'}`}
+            </div>
+          )}
         </div>
       </aside>
 
@@ -181,7 +217,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
             >
               <Menu size={22} />
             </button>
-            <div className="font-bold text-slate-800">Flowly</div>
+            <div className="font-bold text-slate-800">Flowlyfix</div>
           </div>
           <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
             <Bell size={18} />

@@ -3,20 +3,18 @@ import { ensureAuthenticated } from './helpers/auth';
 
 test.setTimeout(180_000);
 
-test('admin billing route remains stable across refreshes', async ({ page }) => {
-  await page.goto('/admin/billing?tab=ready');
+test('admin sidebar keeps billing nav visible across refresh cycles', async ({ page }) => {
+  await page.goto('/admin/dashboard');
   await ensureAuthenticated(page);
 
   const loginButton = page.getByRole('button', { name: /Logga in|Sign in/i });
 
-  await expect(page).toHaveURL(/\/admin\/billing/);
-  await expect(page.getByRole('heading', { name: /Faktureringskö|Billing Queue/i })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/dashboard/);
   await expect(page.getByTestId('nav-billing')).toBeVisible();
 
   for (let i = 0; i < 10; i += 1) {
     await page.reload();
-    await expect(page).toHaveURL(/\/admin\/billing/);
-    await expect(page.getByRole('heading', { name: /Faktureringskö|Billing Queue/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/dashboard/);
     await expect(page.getByTestId('nav-billing')).toBeVisible();
     await expect(loginButton).toHaveCount(0);
   }

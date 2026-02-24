@@ -36,7 +36,7 @@ export const AIAssistant: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const systemPrompt = `
-        You are 'Flowly AI', a helpful assistant for the Flowly Field Service Management platform.
+        You are 'Flowlyfix AI', a helpful assistant for the Flowlyfix Field Service Management platform.
         Your goal is to help users understand how to use the application.
         
         Platform Structure:
@@ -87,7 +87,7 @@ export const AIAssistant: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-sm">Flowly AI</h3>
+                <h3 className="font-bold text-sm">Flowlyfix AI</h3>
                 <p className="text-[10px] text-blue-200">{language === 'sv' ? 'Systemexpert' : 'System Expert'}</p>
               </div>
             </div>
@@ -100,7 +100,7 @@ export const AIAssistant: React.FC = () => {
           <div className="h-80 overflow-y-auto p-4 bg-slate-50 space-y-3 custom-scrollbar">
             {messages.length === 0 && (
               <div className="text-center text-slate-400 text-sm mt-10 px-4">
-                <p>{language === 'sv' ? 'Hej! Jag kan hjälpa dig med frågor om Flowly.' : 'Hi! I can help you with questions about Flowly.'}</p>
+                <p>{language === 'sv' ? 'Hej! Jag kan hjälpa dig med frågor om Flowlyfix.' : 'Hi! I can help you with questions about Flowlyfix.'}</p>
               </div>
             )}
             {messages.map((msg, i) => (

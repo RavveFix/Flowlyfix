@@ -59,6 +59,7 @@ Deno.serve(async (req: Request) => {
         email,
         full_name: fullName,
         role,
+        status: 'ACTIVE',
       },
       {
         onConflict: 'id',

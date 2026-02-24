@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AuthPage } from '@/features/auth/pages/AuthPage';
+import { AuthConfigErrorPage } from '@/features/auth/pages/AuthConfigErrorPage';
 import { ProfileLoadErrorPage } from '@/features/auth/pages/ProfileLoadErrorPage';
 import { RequireRole } from '@/features/auth/guards/RequireRole';
 import { useAuth } from '@/features/auth/state/AuthContext';
@@ -20,7 +21,17 @@ const PageLoader = () => {
 };
 
 export const AppRouter: React.FC = () => {
-  const { authState, loading, profile, profileError, retryProfileLoad, signOut } = useAuth();
+  const { authState, loading, profile, profileError, retryProfileLoad, runtimeAuthMode, signOut } = useAuth();
+
+  React.useEffect(() => {
+    if (authState === 'authenticated' && !profile) {
+      void retryProfileLoad();
+    }
+  }, [authState, profile, retryProfileLoad]);
+
+  if (runtimeAuthMode === 'misconfigured') {
+    return <AuthConfigErrorPage />;
+  }
 
   if (loading || authState === 'bootstrapping') {
     return <PageLoader />;
@@ -30,13 +41,17 @@ export const AppRouter: React.FC = () => {
     return <ProfileLoadErrorPage error={profileError} onRetry={retryProfileLoad} onSignOut={signOut} />;
   }
 
-  if (authState === 'unauthenticated' || !profile) {
+  if (authState === 'unauthenticated') {
     return (
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
+  }
+
+  if (authState === 'authenticated' && !profile) {
+    return <PageLoader />;
   }
 
   return (

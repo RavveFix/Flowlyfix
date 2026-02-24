@@ -9,12 +9,7 @@ export async function fetchResourcesByOrganization(organizationId: string) {
   const [customersRes, assetsRes, techsRes, inventoryRes] = await Promise.all([
     supabase.from('customers').select('*').eq('organization_id', organizationId).order('name'),
     supabase.from('assets').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false }),
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('role', UserRole.TECHNICIAN)
-      .order('full_name'),
+    supabase.from('profiles').select('*').eq('organization_id', organizationId).order('full_name'),
     supabase.from('inventory_items').select('*').eq('organization_id', organizationId).order('name'),
   ]);
 
@@ -112,12 +107,77 @@ export async function deleteAssetRow(organizationId: string, id: string) {
   return supabase.from('assets').delete().eq('id', id).eq('organization_id', organizationId);
 }
 
-export async function deleteTechnicianRow(organizationId: string, id: string) {
+export async function manageUserFn(input: {
+  action: 'deactivate_user' | 'reactivate_user' | 'change_role' | 'delete_user_hard';
+  user_id: string;
+  role?: UserRole;
+}) {
   if (!supabase) {
     throw new Error('Supabase client is not available');
   }
 
-  return supabase.from('profiles').delete().eq('id', id).eq('organization_id', organizationId);
+  const requestBody = {
+    action: input.action,
+    user_id: input.user_id,
+    role: input.role,
+  };
+
+  const invokeManageUser = async () => {
+    let {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      session = refreshed.session;
+    }
+
+    if (!session?.access_token) {
+      return {
+        data: null,
+        error: {
+          message: 'No active session. Please sign in again.',
+          context: { status: 401 },
+        },
+      };
+    }
+
+    return supabase.functions.invoke('manage-user', {
+      body: requestBody,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+  };
+
+  const firstAttempt = await invokeManageUser();
+  if (!firstAttempt.error) {
+    return firstAttempt;
+  }
+
+  const status = (firstAttempt.error as { context?: { status?: number } }).context?.status;
+  if (status !== 401) {
+    return firstAttempt;
+  }
+
+  await supabase.auth.refreshSession();
+  const secondAttempt = await invokeManageUser();
+  if (!secondAttempt.error) {
+    return secondAttempt;
+  }
+
+  const secondStatus = (secondAttempt.error as { context?: { status?: number } }).context?.status;
+  if (secondStatus === 401) {
+    return {
+      data: null,
+      error: {
+        ...secondAttempt.error,
+        message: 'Session expired or unauthorized. Please sign in again.',
+      },
+    };
+  }
+
+  return secondAttempt;
 }
 
 export async function inviteTechnicianFn(input: {

@@ -7,7 +7,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 export const SettingsPage: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
-  const [orgName, setOrgName] = useState("Flowly Inc.");
+  const [orgName, setOrgName] = useState("Flowlyfix Inc.");
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
   

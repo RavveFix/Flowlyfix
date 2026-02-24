@@ -5,6 +5,11 @@ interface AdminAuthResult {
   requesterId: string;
 }
 
+interface AuthenticatedUserResult {
+  userId: string;
+  email: string;
+}
+
 function createUserClient(req: Request): SupabaseClient {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -42,6 +47,20 @@ export function createServiceClient(): SupabaseClient {
   });
 }
 
+export async function requireAuthenticatedUser(req: Request): Promise<AuthenticatedUserResult> {
+  const userClient = createUserClient(req);
+
+  const { data: userData, error: userError } = await userClient.auth.getUser();
+  if (userError || !userData.user) {
+    throw new Error('Unauthorized');
+  }
+
+  return {
+    userId: userData.user.id,
+    email: userData.user.email?.trim().toLowerCase() ?? '',
+  };
+}
+
 export async function requireAdmin(req: Request): Promise<AdminAuthResult> {
   const userClient = createUserClient(req);
 
@@ -52,12 +71,16 @@ export async function requireAdmin(req: Request): Promise<AdminAuthResult> {
 
   const { data: profile, error: profileError } = await userClient
     .from('profiles')
-    .select('organization_id, role')
+    .select('organization_id, role, status')
     .eq('id', userData.user.id)
     .single();
 
   if (profileError || !profile) {
     throw new Error('Profile not found');
+  }
+
+  if (profile.status !== 'ACTIVE') {
+    throw new Error('Unauthorized');
   }
 
   if (profile.role !== 'ADMIN') {

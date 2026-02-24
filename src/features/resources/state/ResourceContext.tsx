@@ -8,6 +8,7 @@ import {
   Profile,
   TechnicianProfile,
   UserRole,
+  UserStatus,
 } from '@/shared/types';
 import { supabase, isSupabaseConfigured } from '@/shared/lib/supabase/client';
 import { useAuth } from '@/features/auth/state/AuthContext';
@@ -16,10 +17,10 @@ import {
   addCustomerRow,
   deleteAssetRow,
   deleteCustomerRow,
-  deleteTechnicianRow,
   fetchResourcesByOrganization,
   importCustomersAssetsFn,
   inviteTechnicianFn,
+  manageUserFn,
   subscribeToResourceChanges,
   updateAssetRow,
   updateCustomerRow,
@@ -35,6 +36,7 @@ interface ResourceContextType {
   customers: Customer[];
   assets: Asset[];
   technicians: TechnicianProfile[];
+  teamMembers: Profile[];
   inventoryItems: InventoryItem[];
   loading: boolean;
   addCustomer: (customer: Partial<Customer>) => Promise<Customer | null>;
@@ -44,8 +46,11 @@ interface ResourceContextType {
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
   addTechnician: (tech: { id?: string; name?: string }) => Promise<void>;
-  deleteTechnician: (id: string) => Promise<void>;
   inviteTechnician: (input: InviteTechnicianInput) => Promise<{ invited_user_id: string; invite_sent: boolean }>;
+  deactivateUser: (id: string) => Promise<void>;
+  reactivateUser: (id: string) => Promise<void>;
+  changeUserRole: (id: string, role: UserRole) => Promise<void>;
+  deleteUserHard: (id: string) => Promise<void>;
   importCustomersAssets: (rows: CsvImportRow[], dryRun?: boolean) => Promise<CsvImportResult>;
   getAssetName: (id?: string | null) => string;
   getCustomerName: (id?: string | null) => string;
@@ -117,13 +122,25 @@ const DEMO_ASSETS: Asset[] = [
   },
 ];
 
-const DEMO_TECHNICIANS: TechnicianProfile[] = [
+const DEMO_TEAM_MEMBERS: Profile[] = [
+  {
+    id: 'demo-admin-1',
+    organization_id: 'demo-org',
+    email: 'admin@flowly.io',
+    full_name: 'Flowlyfix Admin',
+    role: UserRole.ADMIN,
+    status: UserStatus.ACTIVE,
+    avatar_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
   {
     id: 'demo-tech-1',
     organization_id: 'demo-org',
     email: 'sarah@flowly.io',
     full_name: 'Sarah Connor',
     role: UserRole.TECHNICIAN,
+    status: UserStatus.ACTIVE,
     avatar_url: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -134,21 +151,37 @@ const DEMO_TECHNICIANS: TechnicianProfile[] = [
     email: 'kyle@flowly.io',
     full_name: 'Kyle Reese',
     role: UserRole.TECHNICIAN,
+    status: UserStatus.ACTIVE,
     avatar_url: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
 ];
 
+function deriveTechnicians(users: Profile[]): TechnicianProfile[] {
+  return users
+    .filter((member): member is TechnicianProfile => member.role === UserRole.TECHNICIAN && member.status === UserStatus.ACTIVE)
+    .map((member) => ({
+      ...member,
+      role: UserRole.TECHNICIAN,
+    }));
+}
+
 export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
   const { profile, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   const organizationId = profile?.organization_id ?? null;
+
+  const refreshUsersFromList = (members: Profile[]) => {
+    setTeamMembers(members);
+    setTechnicians(deriveTechnicians(members));
+  };
 
   const loadResources = async () => {
     if (authLoading) return;
@@ -156,7 +189,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
     if (!organizationId || !supabase || !isSupabaseConfigured) {
       setCustomers(DEMO_CUSTOMERS);
       setAssets(DEMO_ASSETS);
-      setTechnicians(DEMO_TECHNICIANS);
+      refreshUsersFromList(DEMO_TEAM_MEMBERS);
       setInventoryItems([]);
       setLoading(false);
       return;
@@ -168,15 +201,12 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
 
     if (customersRes.error) console.error('customers load failed:', customersRes.error.message);
     if (assetsRes.error) console.error('assets load failed:', assetsRes.error.message);
-    if (techsRes.error) console.error('technicians load failed:', techsRes.error.message);
+    if (techsRes.error) console.error('profiles load failed:', techsRes.error.message);
     if (inventoryRes.error) console.error('inventory load failed:', inventoryRes.error.message);
 
     setCustomers((customersRes.data as Customer[]) ?? []);
     setAssets((assetsRes.data as Asset[]) ?? []);
-    setTechnicians(((techsRes.data as Profile[]) ?? []).map((profileRow) => ({
-      ...profileRow,
-      role: UserRole.TECHNICIAN,
-    })));
+    refreshUsersFromList((techsRes.data as Profile[]) ?? []);
     setInventoryItems((inventoryRes.data as InventoryItem[]) ?? []);
     setLoading(false);
   };
@@ -344,54 +374,79 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
   const addTechnician = async (tech: { id?: string; name?: string }) => {
     if (!supabase || !organizationId) {
       const displayName = tech.name?.trim() || 'New Technician';
-      setTechnicians((prev) => [
-        {
-          id: tech.id ?? crypto.randomUUID(),
-          organization_id: organizationId ?? 'demo-org',
-          email: `${displayName.toLowerCase().replace(/\s+/g, '.')}@flowly.local`,
-          full_name: displayName,
-          role: UserRole.TECHNICIAN,
-          avatar_url: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+      const member: Profile = {
+        id: tech.id ?? crypto.randomUUID(),
+        organization_id: organizationId ?? 'demo-org',
+        email: `${displayName.toLowerCase().replace(/\s+/g, '.')}@flowly.local`,
+        full_name: displayName,
+        role: UserRole.TECHNICIAN,
+        status: UserStatus.ACTIVE,
+        avatar_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      refreshUsersFromList([member, ...teamMembers]);
       return;
     }
 
     throw new Error('Use inviteTechnician for Supabase-backed environments.');
   };
 
-  const deleteTechnician = async (id: string) => {
+  const runManageUser = async (
+    action: 'deactivate_user' | 'reactivate_user' | 'change_role' | 'delete_user_hard',
+    id: string,
+    role?: UserRole,
+  ) => {
     if (!supabase || !organizationId) {
-      setTechnicians((prev) => prev.filter((tech) => tech.id !== id));
+      setTeamMembers((prev) => {
+        if (action === 'delete_user_hard') {
+          const next = prev.filter((member) => member.id !== id);
+          setTechnicians(deriveTechnicians(next));
+          return next;
+        }
+
+        const next = prev.map((member) => {
+          if (member.id !== id) return member;
+          if (action === 'deactivate_user') return { ...member, status: UserStatus.INACTIVE };
+          if (action === 'reactivate_user') return { ...member, status: UserStatus.ACTIVE };
+          if (action === 'change_role' && role) return { ...member, role };
+          return member;
+        });
+
+        setTechnicians(deriveTechnicians(next));
+        return next;
+      });
       return;
     }
 
-    const { error } = await deleteTechnicianRow(organizationId, id);
+    const { error } = await manageUserFn({ action, user_id: id, role });
     if (error) {
-      console.error('deleteTechnician failed:', error.message);
-      return;
+      throw new Error(error.message);
     }
 
-    setTechnicians((prev) => prev.filter((tech) => tech.id !== id));
+    await loadResources();
   };
+
+  const deactivateUser = async (id: string) => runManageUser('deactivate_user', id);
+  const reactivateUser = async (id: string) => runManageUser('reactivate_user', id);
+  const changeUserRole = async (id: string, role: UserRole) => runManageUser('change_role', id, role);
+  const deleteUserHard = async (id: string) => runManageUser('delete_user_hard', id);
 
   const inviteTechnician = async (input: InviteTechnicianInput) => {
     if (!supabase) {
       const fakeId = crypto.randomUUID();
-      const technician: TechnicianProfile = {
+      const member: Profile = {
         id: fakeId,
         organization_id: organizationId ?? 'demo-org',
         email: input.email,
         full_name: input.full_name,
-        role: UserRole.TECHNICIAN,
+        role: input.role ?? UserRole.TECHNICIAN,
+        status: UserStatus.ACTIVE,
         avatar_url: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      setTechnicians((prev) => [technician, ...prev]);
+      refreshUsersFromList([member, ...teamMembers]);
       return { invited_user_id: fakeId, invite_sent: true };
     }
 
@@ -489,6 +544,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       customers,
       assets,
       technicians,
+      teamMembers,
       inventoryItems,
       loading,
       addCustomer,
@@ -498,8 +554,11 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       updateAsset,
       deleteAsset,
       addTechnician,
-      deleteTechnician,
       inviteTechnician,
+      deactivateUser,
+      reactivateUser,
+      changeUserRole,
+      deleteUserHard,
       importCustomersAssets,
       getAssetName,
       getCustomerName,
@@ -508,7 +567,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       getTechnicianById,
       reload: loadResources,
     }),
-    [customers, assets, technicians, inventoryItems, loading, organizationId],
+    [customers, assets, technicians, teamMembers, inventoryItems, loading, organizationId],
   );
 
   return <ResourceContext.Provider value={value}>{children}</ResourceContext.Provider>;

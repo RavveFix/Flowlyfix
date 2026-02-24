@@ -1,13 +1,14 @@
 import { expect, test } from '@playwright/test';
+import { ensureAuthenticated } from './helpers/auth';
 
 test.setTimeout(180_000);
 
 test('admin smoke: dispatch, workshop and billing flow', async ({ page }) => {
-  const base = 'http://127.0.0.1:4173';
   const reportText = `Workshop smoke report ${Date.now()}`;
   const adjustedReport = `${reportText}\nAdminjusterat underlag.`;
 
-  await page.goto(`${base}/admin/dashboard`);
+  await page.goto('/admin/dashboard');
+  await ensureAuthenticated(page);
 
   const sidebar = page.locator('aside');
   await expect(sidebar.getByRole('button', { name: /Planering|Dispatch/i })).toBeVisible();

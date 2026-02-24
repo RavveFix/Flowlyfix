@@ -2,17 +2,20 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useResources } from '@/features/resources/state/ResourceContext';
 import { Search, Plus, Trash2, Box, Users, Upload } from 'lucide-react';
-import { Asset, CsvImportResult } from '@/shared/types';
+import { Asset, CsvImportResult, UserRole } from '@/shared/types';
 import { CSV_IMPORT_HEADERS, parseCsvImport } from '@/features/resources/lib/csv';
 
 export const ResourcesPage: React.FC = () => {
   const { t } = useLanguage();
   const {
     assets,
-    technicians,
+    teamMembers,
     addAsset,
     deleteAsset,
-    deleteTechnician,
+    deactivateUser,
+    reactivateUser,
+    changeUserRole,
+    deleteUserHard,
     customers,
     inviteTechnician,
     importCustomersAssets,
@@ -50,12 +53,12 @@ export const ResourcesPage: React.FC = () => {
 
   const filteredTechs = useMemo(
     () =>
-      technicians.filter(
-        (technician) =>
-          technician.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          technician.email.toLowerCase().includes(searchTerm.toLowerCase()),
+      teamMembers.filter(
+        (member) =>
+          member.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          member.email.toLowerCase().includes(searchTerm.toLowerCase()),
       ),
-    [technicians, searchTerm],
+    [teamMembers, searchTerm],
   );
 
   const handleAddAsset = async (event: React.FormEvent) => {
@@ -88,6 +91,38 @@ export const ResourcesPage: React.FC = () => {
       setNewTechEmail('');
     } catch (error) {
       alert(error instanceof Error ? error.message : t('resources.invite_failed'));
+    }
+  };
+
+  const handleToggleUserStatus = async (id: string, isActive: boolean) => {
+    try {
+      if (isActive) {
+        await deactivateUser(id);
+      } else {
+        await reactivateUser(id);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+    }
+  };
+
+  const handleToggleRole = async (id: string, isAdmin: boolean) => {
+    try {
+      await changeUserRole(id, isAdmin ? UserRole.TECHNICIAN : UserRole.ADMIN);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+    }
+  };
+
+  const handleHardDelete = async (id: string) => {
+    if (!window.confirm(t('resources.confirm_hard_delete'))) {
+      return;
+    }
+
+    try {
+      await deleteUserHard(id);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
     }
   };
 
@@ -266,31 +301,67 @@ export const ResourcesPage: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4">{t('settings.table.user')}</th>
                   <th className="px-6 py-4">{t('common.email')}</th>
+                  <th className="px-6 py-4">{t('settings.table.role')}</th>
+                  <th className="px-6 py-4">{t('settings.table.status')}</th>
                   <th className="px-6 py-4 text-right">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredTechs.map((tech) => (
-                  <tr key={tech.id} className="hover:bg-gray-50 transition-colors">
+                {filteredTechs.map((member) => (
+                  <tr key={member.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
-                          {tech.full_name.charAt(0)}
+                          {member.full_name.charAt(0)}
                         </div>
-                        <span className="font-medium text-slate-900">{tech.full_name}</span>
+                        <span className="font-medium text-slate-900">{member.full_name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm">{tech.email}</td>
+                    <td className="px-6 py-4 text-sm">{member.email}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                        {member.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          member.status === 'ACTIVE'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {member.status}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => deleteTechnician(tech.id)} className="text-slate-400 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleToggleUserStatus(member.id, member.status === 'ACTIVE')}
+                          className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          {member.status === 'ACTIVE' ? t('resources.deactivate') : t('resources.reactivate')}
+                        </button>
+                        <button
+                          onClick={() => handleToggleRole(member.id, member.role === 'ADMIN')}
+                          className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          {member.role === 'ADMIN' ? t('resources.make_technician') : t('resources.make_admin')}
+                        </button>
+                        <button
+                          onClick={() => handleHardDelete(member.id)}
+                          className="text-slate-400 hover:text-red-500 transition-colors"
+                          title={t('resources.hard_delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {filteredTechs.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="p-8 text-center text-slate-400 italic">
+                    <td colSpan={5} className="p-8 text-center text-slate-400 italic">
                       {t('customers.no_customers')}
                     </td>
                   </tr>

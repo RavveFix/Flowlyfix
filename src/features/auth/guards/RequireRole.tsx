@@ -27,7 +27,7 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ allow, children }) => 
   }
 
   if (!allow.includes(profile.role)) {
-    const fallback = profile.role === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard';
+    const fallback = profile.role === UserRole.TECHNICIAN ? '/field' : '/login';
     return <Navigate to={fallback} replace />;
   }
 
