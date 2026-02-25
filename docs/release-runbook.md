@@ -1,11 +1,14 @@
 # Release Runbook
 
 ## CI/CD flow
-- PRs to `main` must pass `label-policy`, `typecheck`, `build`, `smoke-auth`, `smoke-admin`.
+- PRs to `staging` and `main` must pass `label-policy`, `typecheck`, `build`, `smoke-auth`, `smoke-admin`.
+- Recommended branch flow: feature branch -> `staging` -> `main`.
 - Vercel handles preview deploys per PR and production deploy on merge to `main`.
-- Supabase deploy workflow runs automatically on `main` pushes that touch:
+- Supabase deploy workflow runs automatically on `staging` and `main` pushes that touch:
   - `supabase/migrations/**`
   - `supabase/functions/**`
+  - `staging` reads `*_STAGING` secrets.
+  - `main` reads production secrets.
 
 ## Required GitHub Secrets
 - `VITE_SUPABASE_URL`
@@ -16,6 +19,10 @@
 - `SUPABASE_PROJECT_REF`
 - `SUPABASE_DB_PASSWORD` (recommended)
 - `SUPABASE_DB_URL` (read-only verification connection)
+- `SUPABASE_ACCESS_TOKEN_STAGING`
+- `SUPABASE_PROJECT_REF_STAGING`
+- `SUPABASE_DB_PASSWORD_STAGING` (recommended)
+- `SUPABASE_DB_URL_STAGING` (read-only verification connection)
 
 ## Agent lanes (max 3 parallel)
 - Branch naming: `agent/{ticket-id}-{short-name}`
@@ -40,4 +47,4 @@
 - Vercel production deployment responds and core smoke paths work.
 
 ## Branch protection setup
-- Run `scripts/setup-branch-protection.sh` (requires admin rights on repository).
+- Run `scripts/setup-branch-protection.sh RavveFix/Flowlyfix staging main` (requires admin rights on repository).
