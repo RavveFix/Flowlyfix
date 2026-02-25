@@ -60,6 +60,73 @@ E2E_ADMIN_EMAIL=...
 E2E_ADMIN_PASSWORD=...
 ```
 
+## Automation and CI/CD
+
+- PR gates run in GitHub Actions (`.github/workflows/ci-pr.yml`):
+  - `label-policy`
+  - `typecheck`
+  - `build`
+  - `smoke-auth`
+  - `smoke-admin`
+- Vercel handles branch preview deploys and production deploys from `main`.
+- Extra preview validation runs in `.github/workflows/vercel-preview-guard.yml`.
+- Supabase deploy on `main` runs via `.github/workflows/deploy-supabase-main.yml` for changes in `supabase/migrations/**` and `supabase/functions/**`.
+
+Required CI secrets:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `E2E_ADMIN_EMAIL`
+- `E2E_ADMIN_PASSWORD`
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_PROJECT_REF`
+- `SUPABASE_DB_PASSWORD` (recommended)
+- `SUPABASE_DB_URL`
+
+## Agent Lanes (3 Parallel Tracks)
+
+- Branch format: `agent/{ticket-id}-{short-name}`
+- One required lane label per PR:
+  - `agent-track-1`
+  - `agent-track-2`
+  - `agent-track-3`
+- Additional labels:
+  - `db-change` when `supabase/migrations/**` or `supabase/functions/**` are touched.
+  - `risk-high` when auth/RLS/policy/permission-sensitive code is touched.
+- Workflow style (hybrid): keep repo-specific Flowly skills/processes, but adopt superpowers-inspired sequence `spec -> plan -> execution` plus worktree-based parallel lanes.
+
+PR template: `.github/pull_request_template.md`
+
+## Local Ops Commands
+
+- Full smoke flow (Supabase + build + Playwright):
+
+```bash
+npm run ops:smoke
+```
+
+- Pre-push local gate:
+
+```bash
+npm run ops:prepush
+```
+
+- Changed-files smoke selection:
+
+```bash
+npm run ops:changed-smoke
+```
+
+## Branch Protection
+
+Apply recommended protection and labels (repo admin required):
+
+```bash
+scripts/setup-branch-protection.sh
+```
+
+See `docs/release-runbook.md` for release and rollback procedures.
+
 ## Supabase schema
 
 - Source of truth: `supabase/migrations/*`
