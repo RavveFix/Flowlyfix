@@ -44,13 +44,18 @@ test('field sign-off drives billing READY -> SENT -> INVOICED', async ({ page })
   const sendInvoiceButtons = page.getByRole('button', { name: /Skicka faktura|Send Invoice/i });
   const hasReadyRow = (await sendInvoiceButtons.count()) > 0;
   test.skip(!hasReadyRow, `No READY billing rows available after completing field job "${customerName}".`);
-  await sendInvoiceButtons.first().click();
+  await expect(sendInvoiceButtons.first()).toBeVisible({ timeout: 15_000 });
+  await expect(async () => {
+    await sendInvoiceButtons.first().click();
+  }).toPass({ timeout: 15_000 });
 
   // Move SENT -> INVOICED.
   await page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ }).click();
   const markInvoicedButtons = page.getByRole('button', { name: /Markera som fakturerad|Mark as Invoiced/i });
   await expect(markInvoicedButtons.first()).toBeVisible({ timeout: 15_000 });
-  await markInvoicedButtons.first().click();
+  await expect(async () => {
+    await markInvoicedButtons.first().click();
+  }).toPass({ timeout: 15_000 });
 
   // Verify in INVOICED tab.
   const invoicedTab = page.getByRole('button', { name: /^(Fakturerad|Invoiced) \(\d+\)$/ });
