@@ -62,15 +62,19 @@ E2E_ADMIN_PASSWORD=...
 
 ## Automation and CI/CD
 
+- Integration branch: `staging` (default flow). Production promotion: `staging -> main`.
 - PR gates run in GitHub Actions (`.github/workflows/ci-pr.yml`):
   - `label-policy`
   - `typecheck`
   - `build`
   - `smoke-auth`
   - `smoke-admin`
+  - Triggered for PRs targeting `staging` and `main`.
 - Vercel handles branch preview deploys and production deploys from `main`.
 - Extra preview validation runs in `.github/workflows/vercel-preview-guard.yml`.
-- Supabase deploy on `main` runs via `.github/workflows/deploy-supabase-main.yml` for changes in `supabase/migrations/**` and `supabase/functions/**`.
+- Supabase deploy runs on pushes to `staging` and `main` via `.github/workflows/deploy-supabase-main.yml` for changes in `supabase/migrations/**` and `supabase/functions/**`.
+  - `staging` uses `*_STAGING` secrets.
+  - `main` uses production secrets.
 
 Required CI secrets:
 
@@ -82,6 +86,10 @@ Required CI secrets:
 - `SUPABASE_PROJECT_REF`
 - `SUPABASE_DB_PASSWORD` (recommended)
 - `SUPABASE_DB_URL`
+- `SUPABASE_ACCESS_TOKEN_STAGING`
+- `SUPABASE_PROJECT_REF_STAGING`
+- `SUPABASE_DB_PASSWORD_STAGING` (recommended)
+- `SUPABASE_DB_URL_STAGING`
 
 ## Agent Lanes (3 Parallel Tracks)
 
@@ -122,7 +130,7 @@ npm run ops:changed-smoke
 Apply recommended protection and labels (repo admin required):
 
 ```bash
-scripts/setup-branch-protection.sh
+scripts/setup-branch-protection.sh RavveFix/Flowlyfix staging main
 ```
 
 See `docs/release-runbook.md` for release and rollback procedures.

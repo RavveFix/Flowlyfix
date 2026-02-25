@@ -2,6 +2,13 @@
 set -euo pipefail
 
 OWNER_REPO="${1:-RavveFix/Flowlyfix}"
+shift || true
+
+if [ "$#" -eq 0 ]; then
+  TARGET_BRANCHES=("staging" "main")
+else
+  TARGET_BRANCHES=("$@")
+fi
 
 # Ensure required labels exist.
 gh label create "agent-track-1" --repo "$OWNER_REPO" --color "1f6feb" --description "Agent lane 1 (required: one agent-track label per PR)." --force >/dev/null
@@ -15,7 +22,7 @@ echo "Ensured label: db-change"
 gh label create "risk-high" --repo "$OWNER_REPO" --color "b60205" --description "PR touches high-risk auth/RLS/policy/permission surfaces." --force >/dev/null
 echo "Ensured label: risk-high"
 
-# Apply branch protection rules for main.
+# Build shared branch protection payload.
 tmp_payload="$(mktemp)"
 cat > "$tmp_payload" <<'JSON'
 {
@@ -40,11 +47,12 @@ cat > "$tmp_payload" <<'JSON'
 }
 JSON
 
-gh api --method PUT \
-  -H "Accept: application/vnd.github+json" \
-  "repos/$OWNER_REPO/branches/main/protection" \
-  --input "$tmp_payload"
+for TARGET_BRANCH in "${TARGET_BRANCHES[@]}"; do
+  gh api --method PUT \
+    -H "Accept: application/vnd.github+json" \
+    "repos/$OWNER_REPO/branches/$TARGET_BRANCH/protection" \
+    --input "$tmp_payload" >/dev/null
+  echo "Branch protection updated for $OWNER_REPO $TARGET_BRANCH."
+done
 
 rm -f "$tmp_payload"
-
-echo "Branch protection updated for $OWNER_REPO main."

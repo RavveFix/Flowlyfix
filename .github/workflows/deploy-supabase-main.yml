@@ -1,8 +1,9 @@
-name: deploy-supabase-main
+name: deploy-supabase
 
 on:
   push:
     branches:
+      - staging
       - main
     paths:
       - 'supabase/migrations/**'
@@ -10,7 +11,7 @@ on:
       - 'scripts/ci/supabase-verify.sql'
 
 concurrency:
-  group: deploy-supabase-main
+  group: deploy-supabase-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -18,25 +19,70 @@ permissions:
 
 jobs:
   deploy:
-    name: deploy-supabase
+    name: deploy-supabase-${{ github.ref_name }}
     runs-on: ubuntu-latest
     env:
+      # Production secrets (main)
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # Staging secrets (staging)
+      SUPABASE_ACCESS_TOKEN_STAGING: ${{ secrets.SUPABASE_ACCESS_TOKEN_STAGING }}
+      SUPABASE_PROJECT_REF_STAGING: ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+      SUPABASE_DB_PASSWORD_STAGING: ${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}
+      SUPABASE_DB_URL_STAGING: ${{ secrets.SUPABASE_DB_URL_STAGING }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Select Supabase target
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_NAME}" = "staging" ]; then
+            DEPLOY_ENV="staging"
+            ACCESS_TOKEN="${SUPABASE_ACCESS_TOKEN_STAGING:-}"
+            PROJECT_REF="${SUPABASE_PROJECT_REF_STAGING:-}"
+            DB_PASSWORD="${SUPABASE_DB_PASSWORD_STAGING:-}"
+            DB_URL="${SUPABASE_DB_URL_STAGING:-}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            DEPLOY_ENV="production"
+            ACCESS_TOKEN="${SUPABASE_ACCESS_TOKEN:-}"
+            PROJECT_REF="${SUPABASE_PROJECT_REF:-}"
+            DB_PASSWORD="${SUPABASE_DB_PASSWORD:-}"
+            DB_URL="${SUPABASE_DB_URL:-}"
+          else
+            echo "Unsupported branch for deploy: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          echo "DEPLOY_ENV=${DEPLOY_ENV}" >> "$GITHUB_ENV"
+
+          {
+            echo "SUPABASE_ACCESS_TOKEN<<EOF"
+            printf '%s\n' "$ACCESS_TOKEN"
+            echo "EOF"
+            echo "SUPABASE_PROJECT_REF<<EOF"
+            printf '%s\n' "$PROJECT_REF"
+            echo "EOF"
+            echo "SUPABASE_DB_PASSWORD<<EOF"
+            printf '%s\n' "$DB_PASSWORD"
+            echo "EOF"
+            echo "SUPABASE_DB_URL<<EOF"
+            printf '%s\n' "$DB_URL"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
       - name: Validate required secrets
         run: |
           set -euo pipefail
+          echo "Deploy environment: ${DEPLOY_ENV}"
           missing=0
           for key in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_URL; do
             if [ -z "${!key:-}" ]; then
-              echo "Missing required secret: $key"
+              echo "Missing required secret: $key for ${DEPLOY_ENV}"
               missing=1
             fi
           done
