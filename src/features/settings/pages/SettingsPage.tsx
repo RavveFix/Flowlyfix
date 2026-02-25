@@ -204,66 +204,24 @@ export const SettingsPage: React.FC = () => {
            </section>
         </div>
         
-        {/* Team Members */}
         <section className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-           <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-white">
-                <div>
-                    <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-slate-400" /> {t('settings.team_members')}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">{t('settings.manage_access_desc')}</p>
-                </div>
-                <button className="text-sm bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-100 transition-colors">
-                    + {t('settings.add_member')}
-                </button>
-           </div>
-           <div className="p-0 overflow-x-auto">
-             <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-gray-50/50 text-xs uppercase font-bold text-slate-500 border-b border-gray-100">
-                   <tr>
-                      <th className="px-8 py-4">{t('settings.table.user')}</th>
-                      <th className="px-6 py-4">{t('settings.table.role')}</th>
-                      <th className="px-6 py-4">{t('settings.table.status')}</th>
-                      <th className="px-8 py-4 text-right">{t('settings.table.last_active')}</th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                   <tr className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">SC</div>
-                              <span className="font-semibold text-slate-900">Sarah Connor</span>
-                          </div>
-                      </td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">{t('settings.admin_role')}</span></td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>{t('settings.active_status')}</span></td>
-                      <td className="px-8 py-5 text-right font-medium text-slate-500">{t('settings.sample_last_active_recent')}</td>
-                   </tr>
-                   <tr className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">KR</div>
-                              <span className="font-semibold text-slate-900">Kyle Reese</span>
-                          </div>
-                      </td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">{t('settings.tech_role')}</span></td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>{t('settings.active_status')}</span></td>
-                      <td className="px-8 py-5 text-right font-medium text-slate-500">{t('settings.sample_last_active_hour')}</td>
-                   </tr>
-                   <tr className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs">T8</div>
-                              <span className="font-semibold text-slate-900">T-800</span>
-                          </div>
-                      </td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">{t('settings.tech_role')}</span></td>
-                      <td className="px-6 py-5"><span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-bold border border-gray-200"><div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>{t('settings.offline_status')}</span></td>
-                      <td className="px-8 py-5 text-right font-medium text-slate-500">{t('settings.sample_last_active_days')}</td>
-                   </tr>
-                </tbody>
-             </table>
-           </div>
+          <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-white">
+            <div>
+              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-slate-400" /> {t('settings.team_members')}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">{t('settings.manage_access_desc')}</p>
+            </div>
+            <button
+              onClick={() => navigate('/admin/resources')}
+              className="text-sm bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-100 transition-colors"
+            >
+              Öppna accesshantering
+            </button>
+          </div>
+          <div className="px-8 py-6 text-sm text-slate-600">
+            Team och inbjudningar hanteras nu i Resurser-fliken med roller, status och pending invites.
+          </div>
         </section>
 
       </div>

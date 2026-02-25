@@ -31,6 +31,20 @@ export const ProfileLoadErrorPage: React.FC<ProfileLoadErrorPageProps> = ({ erro
     }
   };
 
+  const normalizedError = (error ?? '').toUpperCase();
+  const actionableHint = (() => {
+    if (normalizedError.includes('SESSION_INVALID')) {
+      return 'Sessionen är inte längre giltig. Logga ut och logga in igen.';
+    }
+    if (normalizedError.includes('MEMBERSHIP_NOT_ACTIVE') || normalizedError.includes('NO ACTIVE ORGANIZATION MEMBERSHIP')) {
+      return 'Ditt konto saknar aktivt medlemskap i vald organisation. Be en admin kontrollera inbjudan och roll.';
+    }
+    if (normalizedError.includes('ORG_ROLE_MISMATCH')) {
+      return 'Rollen kunde inte synkas korrekt. Försök igen och kontakta admin om felet kvarstår.';
+    }
+    return null;
+  })();
+
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -44,6 +58,11 @@ export const ProfileLoadErrorPage: React.FC<ProfileLoadErrorPageProps> = ({ erro
         {error && (
           <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 break-words">
             {error}
+          </div>
+        )}
+        {actionableHint && (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 break-words">
+            {actionableHint}
           </div>
         )}
 

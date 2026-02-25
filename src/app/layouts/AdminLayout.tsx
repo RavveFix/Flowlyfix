@@ -78,7 +78,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
   const { t } = useLanguage();
   const { authState, profile, memberships, activeOrganizationId, activeRole, runtimeAuthMode, switchActiveOrganization } = useAuth();
   const showAuthDebug = Boolean((import.meta as any).env?.DEV) && runtimeConfig.authDebugEnabled;
-  const orgSwitcherEnabled = ((import.meta as any).env?.VITE_ENABLE_ORG_SWITCHER ?? '').toString().toLowerCase() === 'true';
+  const orgSwitcherEnabled = ((import.meta as any).env?.VITE_ENABLE_ORG_SWITCHER ?? 'true').toString().toLowerCase() !== 'false';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isMobileNotificationsOpen, setIsMobileNotificationsOpen] = React.useState(false);
   const mobileNotificationButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -99,6 +99,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
   const hasBillingNav = useMemo(
     () => navItems.some((item) => item.to === '/admin/billing' && item.testId === 'nav-billing'),
     [navItems],
+  );
+  const activeMembership = useMemo(
+    () => memberships.find((membership) => membership.organization_id === activeOrganizationId) ?? null,
+    [memberships, activeOrganizationId],
   );
 
   React.useEffect(() => {
@@ -197,6 +201,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
             <div className="overflow-hidden flex-1">
               <div className="text-xs font-bold text-white truncate">{profile?.full_name || t('common.admin_user')}</div>
               <div className="text-[10px] text-slate-400 truncate">{profile?.email || 'admin@flowly.io'}</div>
+              <div className="text-[10px] text-emerald-300 truncate">
+                {`${activeRole ?? '-'} · ${activeMembership?.organization?.name ?? activeOrganizationId ?? '-'}`}
+              </div>
             </div>
             <button
               onClick={() => onSignOut()}
@@ -254,6 +261,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onSignOut }) => {
                 </option>
               ))}
             </select>
+            <span className="ml-3 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+              {`Roll: ${activeRole ?? '-'}`}
+            </span>
           </div>
         )}
 

@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 import { AuthPage } from '@/features/auth/pages/AuthPage';
+import { AuthCallbackPage } from '@/features/auth/pages/AuthCallbackPage';
 import { SignupPage } from '@/features/auth/pages/SignupPage';
 import { AuthConfigErrorPage } from '@/features/auth/pages/AuthConfigErrorPage';
 import { ProfileLoadErrorPage } from '@/features/auth/pages/ProfileLoadErrorPage';
@@ -23,23 +24,6 @@ const PageLoader = () => {
 export const AppRouter: React.FC = () => {
   const { authState, loading, profile, activeRole, profileError, retryProfileLoad, runtimeAuthMode, signOut } = useAuth();
   const location = useLocation();
-  const hasAuthCallbackParams = React.useMemo(() => {
-    if (!location.search && !location.hash) {
-      return false;
-    }
-
-    const search = new URLSearchParams(location.search);
-    const hashRaw = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
-    const hash = new URLSearchParams(hashRaw);
-    return (
-      search.has('code') ||
-      search.has('token_hash') ||
-      search.has('type') ||
-      hash.has('access_token') ||
-      hash.has('refresh_token') ||
-      hash.has('type')
-    );
-  }, [location.hash, location.search]);
 
   React.useEffect(() => {
     if (authState === 'authenticated' && !profile) {
@@ -57,7 +41,7 @@ export const AppRouter: React.FC = () => {
     return (
       <Routes>
         <Route path="/login" element={<AuthPage />} />
-        <Route path="/auth/callback" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="*" element={<PageLoader />} />
       </Routes>
@@ -76,7 +60,7 @@ export const AppRouter: React.FC = () => {
     return (
       <Routes>
         <Route path="/login" element={<AuthPage />} />
-        <Route path="/auth/callback" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -101,7 +85,7 @@ export const AppRouter: React.FC = () => {
             <Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />
           }
         />
-        <Route path="/auth/callback" element={<Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
         <Route
           path="/admin/*"

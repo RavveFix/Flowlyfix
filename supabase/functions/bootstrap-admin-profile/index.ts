@@ -33,20 +33,6 @@ Deno.serve(async (req: Request) => {
 
     const service = createServiceClient();
 
-    const { data: existingProfile, error: existingProfileError } = await service
-      .from('profiles')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (existingProfileError) {
-      return jsonResponse({ error: existingProfileError.message }, 400);
-    }
-
-    if (existingProfile) {
-      return jsonResponse({ error: 'Profile already exists for this user' }, 409);
-    }
-
     const { data: org, error: orgError } = await service
       .from('organizations')
       .select('id')
@@ -62,7 +48,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const { count: adminCount, error: adminCountError } = await service
-      .from('profiles')
+      .from('organization_memberships')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .eq('role', 'ADMIN')
@@ -76,17 +62,36 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Active admin already exists for this organization' }, 409);
     }
 
-    const { error: createProfileError } = await service.from('profiles').insert({
-      id: userId,
-      organization_id: organizationId,
-      email,
-      full_name: fullName,
-      role: 'ADMIN',
-      status: 'ACTIVE',
-    });
+    const { error: profileError } = await service.from('profiles').upsert(
+      {
+        id: userId,
+        organization_id: organizationId,
+        active_organization_id: organizationId,
+        email,
+        full_name: fullName,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+      { onConflict: 'id' },
+    );
 
-    if (createProfileError) {
-      return jsonResponse({ error: createProfileError.message }, 400);
+    if (profileError) {
+      return jsonResponse({ error: profileError.message }, 400);
+    }
+
+    const { error: membershipError } = await service.from('organization_memberships').upsert(
+      {
+        user_id: userId,
+        organization_id: organizationId,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        is_default: true,
+      },
+      { onConflict: 'user_id,organization_id' },
+    );
+
+    if (membershipError) {
+      return jsonResponse({ error: membershipError.message }, 400);
     }
 
     return jsonResponse({ ok: true, user_id: userId, role: 'ADMIN', status: 'ACTIVE' });

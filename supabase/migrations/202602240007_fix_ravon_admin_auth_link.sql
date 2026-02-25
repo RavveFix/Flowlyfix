@@ -13,7 +13,8 @@ begin
   limit 1;
 
   if auth_id is null then
-    raise exception 'No auth.users row found for %', target_email;
+    raise notice 'Skipping ravon hotfix: no auth.users row found for %', target_email;
+    return;
   end if;
 
   -- Already linked profile: just enforce role/status/email.
@@ -34,7 +35,8 @@ begin
   limit 1;
 
   if existing_profile_id is null then
-    raise exception 'No profiles row found for %, create profile manually with id=%', target_email, auth_id;
+    raise notice 'Skipping ravon hotfix: no profiles row found for %', target_email;
+    return;
   end if;
 
   -- Move profile row to auth id so requireAdmin() can resolve it.

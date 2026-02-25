@@ -22,7 +22,7 @@ if (!rootElement) {
 }
 
 const isDev = Boolean((import.meta as any).env?.DEV);
-const redirectTarget = isDev ? getCanonicalDevRedirectTarget(window.location, runtimeConfig) : null;
+const redirectTarget = getCanonicalDevRedirectTarget(window.location, runtimeConfig);
 
 if (redirectTarget) {
   window.location.replace(redirectTarget);

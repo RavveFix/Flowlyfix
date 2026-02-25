@@ -12,12 +12,12 @@ export const ResourcesPage: React.FC = () => {
     teamMembers,
     addAsset,
     deleteAsset,
-    deactivateUser,
-    reactivateUser,
-    changeUserRole,
-    deleteUserHard,
     customers,
     inviteTechnician,
+    changeUserRole,
+    pendingInvites,
+    revokeInvite,
+    resendInvite,
     importCustomersAssets,
   } = useResources();
 
@@ -31,6 +31,7 @@ export const ResourcesPage: React.FC = () => {
   const [isTechModalOpen, setIsTechModalOpen] = useState(false);
   const [newTechName, setNewTechName] = useState('');
   const [newTechEmail, setNewTechEmail] = useState('');
+  const [newTechRole, setNewTechRole] = useState<UserRole>(UserRole.TECHNICIAN);
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [csvText, setCsvText] = useState('');
@@ -38,6 +39,7 @@ export const ResourcesPage: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [selectedImportFileName, setSelectedImportFileName] = useState('');
+  const [inviteInfo, setInviteInfo] = useState<string | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const hasCsvData = csvText.trim().length > 0;
 
@@ -59,6 +61,11 @@ export const ResourcesPage: React.FC = () => {
           member.email.toLowerCase().includes(searchTerm.toLowerCase()),
       ),
     [teamMembers, searchTerm],
+  );
+
+  const pendingInviteEmails = useMemo(
+    () => new Set(pendingInvites.filter((invite) => invite.status === 'PENDING').map((invite) => invite.email.toLowerCase())),
+    [pendingInvites],
   );
 
   const handleAddAsset = async (event: React.FormEvent) => {
@@ -85,24 +92,19 @@ export const ResourcesPage: React.FC = () => {
       await inviteTechnician({
         full_name: newTechName,
         email: newTechEmail,
+        role: newTechRole,
       });
       setIsTechModalOpen(false);
       setNewTechName('');
       setNewTechEmail('');
+      setNewTechRole(UserRole.TECHNICIAN);
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('resources.invite_failed'));
-    }
-  };
-
-  const handleToggleUserStatus = async (id: string, isActive: boolean) => {
-    try {
-      if (isActive) {
-        await deactivateUser(id);
-      } else {
-        await reactivateUser(id);
+      const message = error instanceof Error ? error.message : t('resources.invite_failed');
+      if (/unauthorized|session expired|invalid jwt|jwt|401/i.test(message)) {
+        alert('Sessionen har löpt ut. Logga in igen och försök på nytt.');
+        return;
       }
-    } catch (error) {
-      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+      alert(message);
     }
   };
 
@@ -114,13 +116,23 @@ export const ResourcesPage: React.FC = () => {
     }
   };
 
-  const handleHardDelete = async (id: string) => {
-    if (!window.confirm(t('resources.confirm_hard_delete'))) {
-      return;
-    }
-
+  const handleResendInvite = async (invite: { id: string; email: string; role: UserRole }) => {
     try {
-      await deleteUserHard(id);
+      const result = await resendInvite(invite);
+      if (result.alreadyExists) {
+        setInviteInfo(`Inbjudan till ${invite.email} skickades inte om: användaren finns redan eller har redan en aktiv inbjudan.`);
+        return;
+      }
+      setInviteInfo(`Inbjudan skickades om till ${invite.email}.`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    try {
+      await revokeInvite(inviteId);
+      setInviteInfo('Inbjudan har återkallats.');
     } catch (error) {
       alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
     }
@@ -296,8 +308,12 @@ export const ResourcesPage: React.FC = () => {
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-gray-50 text-xs uppercase font-semibold text-slate-500">
+            <>
+              <div className="px-6 py-3 border-b border-gray-100 bg-slate-50 text-xs text-slate-600">
+                Hantera teamet via inbjudningar: bjud in som administratör eller tekniker.
+              </div>
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="bg-gray-50 text-xs uppercase font-semibold text-slate-500">
                 <tr>
                   <th className="px-6 py-4">{t('settings.table.user')}</th>
                   <th className="px-6 py-4">{t('common.email')}</th>
@@ -305,71 +321,108 @@ export const ResourcesPage: React.FC = () => {
                   <th className="px-6 py-4">{t('settings.table.status')}</th>
                   <th className="px-6 py-4 text-right">{t('table.actions')}</th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredTechs.map((member) => (
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                {filteredTechs.map((member) => {
+                  const hasPendingInvite = pendingInviteEmails.has(member.email.toLowerCase());
+                  return (
                   <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
-                          {member.full_name.charAt(0)}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+                            {member.full_name.charAt(0)}
+                          </div>
+                          <span className="font-medium text-slate-900">{member.full_name}</span>
                         </div>
-                        <span className="font-medium text-slate-900">{member.full_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm">{member.email}</td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          member.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleToggleUserStatus(member.id, member.status === 'ACTIVE')}
-                          className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      </td>
+                      <td className="px-6 py-4 text-sm">{member.email}</td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          {member.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            hasPendingInvite
+                              ? 'bg-amber-100 text-amber-700'
+                              : member.status === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}
                         >
-                          {member.status === 'ACTIVE' ? t('resources.deactivate') : t('resources.reactivate')}
-                        </button>
+                          {hasPendingInvite ? 'INVITED' : member.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleToggleRole(member.id, member.role === 'ADMIN')}
                           className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
                           {member.role === 'ADMIN' ? t('resources.make_technician') : t('resources.make_admin')}
                         </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                  {filteredTechs.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400 italic">
+                        {t('customers.no_customers')}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+
+        {activeTab === 'techs' && pendingInvites.length > 0 && (
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-slate-800">Pending invites</h3>
+              {inviteInfo && (
+                <p className="mt-2 text-xs text-amber-700">{inviteInfo}</p>
+              )}
+            </div>
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-gray-50 text-xs uppercase font-semibold text-slate-500">
+                <tr>
+                  <th className="px-6 py-4">{t('common.email')}</th>
+                  <th className="px-6 py-4">{t('settings.table.role')}</th>
+                  <th className="px-6 py-4">Expires</th>
+                  <th className="px-6 py-4 text-right">{t('table.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pendingInvites.map((invite) => (
+                  <tr key={invite.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">{invite.email}</td>
+                    <td className="px-6 py-4">{invite.role}</td>
+                    <td className="px-6 py-4">{invite.expires_at ? new Date(invite.expires_at).toLocaleDateString() : '-'}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => handleHardDelete(member.id)}
-                          className="text-slate-400 hover:text-red-500 transition-colors"
-                          title={t('resources.hard_delete')}
+                          onClick={() => handleResendInvite(invite)}
+                          className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          Resend
+                        </button>
+                        <button
+                          onClick={() => handleRevokeInvite(invite.id)}
+                          className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                        >
+                          Revoke
                         </button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {filteredTechs.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="p-8 text-center text-slate-400 italic">
-                      {t('customers.no_customers')}
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {isAssetModalOpen && (
@@ -447,6 +500,17 @@ export const ResourcesPage: React.FC = () => {
                   required
                   placeholder={t('resources.email_placeholder')}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1">{t('settings.table.role')}</label>
+                <select
+                  className="w-full p-2 border rounded-lg"
+                  value={newTechRole}
+                  onChange={(event) => setNewTechRole(event.target.value as UserRole)}
+                >
+                  <option value={UserRole.TECHNICIAN}>{t('settings.tech_role')}</option>
+                  <option value={UserRole.ADMIN}>{t('settings.admin_role')}</option>
+                </select>
               </div>
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => setIsTechModalOpen(false)} className="px-4 py-2 border rounded-lg">

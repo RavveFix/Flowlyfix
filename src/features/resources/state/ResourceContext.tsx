@@ -5,22 +5,27 @@ import {
   CsvImportRow,
   Customer,
   InventoryItem,
+  OrganizationInvite,
   Profile,
   TechnicianProfile,
   UserRole,
   UserStatus,
 } from '@/shared/types';
-import { supabase, isSupabaseConfigured } from '@/shared/lib/supabase/client';
+import { supabase, isSupabaseConfigured, runtimeAuthMode } from '@/shared/lib/supabase/client';
 import { useAuth } from '@/features/auth/state/AuthContext';
 import {
   addAssetRow,
+  InviteFunctionErrorCode,
+  InviteFunctionResponse,
+  ManageUserRoleErrorCode,
+  changeUserRoleRow,
   addCustomerRow,
   deleteAssetRow,
   deleteCustomerRow,
   fetchResourcesByOrganization,
   importCustomersAssetsFn,
   inviteTechnicianFn,
-  manageUserFn,
+  listPendingInvitesFn,
   subscribeToResourceChanges,
   updateAssetRow,
   updateCustomerRow,
@@ -32,12 +37,54 @@ interface InviteTechnicianInput {
   role?: UserRole;
 }
 
+interface ResendInviteResult {
+  resent: boolean;
+  alreadyExists?: boolean;
+}
+
+function mapInviteError(code: InviteFunctionErrorCode | string | undefined, message: string) {
+  switch (code) {
+    case 'SESSION_INVALID':
+      return 'Sessionen har löpt ut. Logga in igen och försök på nytt.';
+    case 'INVITE_DUPLICATE':
+      return 'En aktiv inbjudan finns redan för denna e-post i organisationen.';
+    case 'MEMBERSHIP_NOT_ACTIVE':
+      return 'Användaren saknar aktivt medlemskap i vald organisation. Försök igen eller kontakta admin.';
+    case 'ORG_ROLE_MISMATCH':
+      return 'Rollen blev inkonsekvent efter inbjudan. Försök igen eller kontakta admin.';
+    case 'INVITE_REDIRECT_MISSING':
+      return 'Miljöfel: INVITE_REDIRECT_URL saknas.';
+    default:
+      return message || 'Kunde inte hantera inbjudan just nu.';
+  }
+}
+
+function mapRoleChangeError(code: ManageUserRoleErrorCode | string | undefined, message: string) {
+  switch (code) {
+    case 'UNAUTHORIZED':
+      return 'Du saknar behörighet för att ändra roller i detta företag.';
+    case 'ORG_SCOPE_MISMATCH':
+      return 'Organisationen i förfrågan matchar inte din aktiva organisation.';
+    case 'MEMBERSHIP_NOT_FOUND':
+      return 'Användaren har inget medlemskap i den aktiva organisationen.';
+    case 'MEMBERSHIP_NOT_ACTIVE':
+      return 'Användaren måste ha ett aktivt medlemskap för att rollen ska kunna ändras.';
+    case 'LAST_ACTIVE_ADMIN':
+      return 'Kan inte ta bort admin-roll från sista aktiva admin i organisationen.';
+    case 'INVALID_INPUT':
+      return 'Ogiltig indata för rolländring.';
+    default:
+      return message || 'Kunde inte uppdatera användarrollen.';
+  }
+}
+
 interface ResourceContextType {
   customers: Customer[];
   assets: Asset[];
   technicians: TechnicianProfile[];
   teamMembers: Profile[];
   inventoryItems: InventoryItem[];
+  pendingInvites: OrganizationInvite[];
   loading: boolean;
   addCustomer: (customer: Partial<Customer>) => Promise<Customer | null>;
   updateCustomer: (id: string, updates: Partial<Customer>) => Promise<void>;
@@ -47,10 +94,9 @@ interface ResourceContextType {
   deleteAsset: (id: string) => Promise<void>;
   addTechnician: (tech: { id?: string; name?: string }) => Promise<void>;
   inviteTechnician: (input: InviteTechnicianInput) => Promise<{ invited_user_id: string; invite_sent: boolean }>;
-  deactivateUser: (id: string) => Promise<void>;
-  reactivateUser: (id: string) => Promise<void>;
   changeUserRole: (id: string, role: UserRole) => Promise<void>;
-  deleteUserHard: (id: string) => Promise<void>;
+  revokeInvite: (inviteId: string) => Promise<void>;
+  resendInvite: (invite: OrganizationInvite) => Promise<ResendInviteResult>;
   importCustomersAssets: (rows: CsvImportRow[], dryRun?: boolean) => Promise<CsvImportResult>;
   getAssetName: (id?: string | null) => string;
   getCustomerName: (id?: string | null) => string;
@@ -168,29 +214,61 @@ function deriveTechnicians(users: Profile[]): TechnicianProfile[] {
 }
 
 export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
-  const { profile, loading: authLoading } = useAuth();
+  const { session, activeRole, activeOrganizationId, loading: authLoading, authState, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<OrganizationInvite[]>([]);
+  const pendingInvitesUnauthorizedRef = React.useRef(false);
+  const hasSession = Boolean(session?.access_token);
+  const isAuthenticated = authState === 'authenticated' && hasSession;
 
-  const organizationId = profile?.organization_id ?? null;
+  const organizationId = activeOrganizationId ?? null;
 
   const refreshUsersFromList = (members: Profile[]) => {
     setTeamMembers(members);
     setTechnicians(deriveTechnicians(members));
   };
 
-  const loadResources = async () => {
-    if (authLoading) return;
+  const refreshInviteAndMembershipState = async () => {
+    await loadResources();
+  };
 
-    if (!organizationId || !supabase || !isSupabaseConfigured) {
+  const loadResources = async () => {
+    if (authLoading || authState === 'bootstrapping') {
+      setLoading(true);
+      return;
+    }
+
+    if (runtimeAuthMode === 'demo') {
       setCustomers(DEMO_CUSTOMERS);
       setAssets(DEMO_ASSETS);
       refreshUsersFromList(DEMO_TEAM_MEMBERS);
       setInventoryItems([]);
+      setPendingInvites([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setCustomers([]);
+      setAssets([]);
+      refreshUsersFromList([]);
+      setInventoryItems([]);
+      setPendingInvites([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase || !isSupabaseConfigured || !organizationId) {
+      setCustomers([]);
+      setAssets([]);
+      refreshUsersFromList([]);
+      setInventoryItems([]);
+      setPendingInvites([]);
       setLoading(false);
       return;
     }
@@ -208,25 +286,47 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
     setAssets((assetsRes.data as Asset[]) ?? []);
     refreshUsersFromList((techsRes.data as Profile[]) ?? []);
     setInventoryItems((inventoryRes.data as InventoryItem[]) ?? []);
+    const canReadInvites = activeRole === UserRole.ADMIN && isAuthenticated && !pendingInvitesUnauthorizedRef.current;
+    if (canReadInvites) {
+      try {
+        const invites = await listPendingInvitesFn(organizationId);
+        pendingInvitesUnauthorizedRef.current = false;
+        setPendingInvites(invites);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/unauthorized|session expired|invalid jwt|jwt|401/i.test(message)) {
+          pendingInvitesUnauthorizedRef.current = true;
+        } else {
+          console.error('pending invites load failed:', error);
+        }
+        setPendingInvites([]);
+      }
+    } else {
+      setPendingInvites([]);
+    }
     setLoading(false);
   };
+
+  useEffect(() => {
+    pendingInvitesUnauthorizedRef.current = false;
+  }, [organizationId]);
 
   useEffect(() => {
     loadResources().catch((error) => {
       console.error('loadResources failed:', error);
       setLoading(false);
     });
-  }, [organizationId, authLoading]);
+  }, [organizationId, authLoading, activeRole, hasSession, isAuthenticated]);
 
   useEffect(() => {
-    if (!supabase || !organizationId) {
+    if (!isAuthenticated || !supabase || !organizationId) {
       return;
     }
 
     return subscribeToResourceChanges(organizationId, () => {
       loadResources().catch((error) => console.error('resource realtime load failed:', error));
     });
-  }, [organizationId]);
+  }, [organizationId, isAuthenticated]);
 
   const addCustomer = async (customer: Partial<Customer>) => {
     const fallback: Customer = {
@@ -392,46 +492,6 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
     throw new Error('Use inviteTechnician for Supabase-backed environments.');
   };
 
-  const runManageUser = async (
-    action: 'deactivate_user' | 'reactivate_user' | 'change_role' | 'delete_user_hard',
-    id: string,
-    role?: UserRole,
-  ) => {
-    if (!supabase || !organizationId) {
-      setTeamMembers((prev) => {
-        if (action === 'delete_user_hard') {
-          const next = prev.filter((member) => member.id !== id);
-          setTechnicians(deriveTechnicians(next));
-          return next;
-        }
-
-        const next = prev.map((member) => {
-          if (member.id !== id) return member;
-          if (action === 'deactivate_user') return { ...member, status: UserStatus.INACTIVE };
-          if (action === 'reactivate_user') return { ...member, status: UserStatus.ACTIVE };
-          if (action === 'change_role' && role) return { ...member, role };
-          return member;
-        });
-
-        setTechnicians(deriveTechnicians(next));
-        return next;
-      });
-      return;
-    }
-
-    const { error } = await manageUserFn({ action, user_id: id, role });
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    await loadResources();
-  };
-
-  const deactivateUser = async (id: string) => runManageUser('deactivate_user', id);
-  const reactivateUser = async (id: string) => runManageUser('reactivate_user', id);
-  const changeUserRole = async (id: string, role: UserRole) => runManageUser('change_role', id, role);
-  const deleteUserHard = async (id: string) => runManageUser('delete_user_hard', id);
-
   const inviteTechnician = async (input: InviteTechnicianInput) => {
     if (!supabase) {
       const fakeId = crypto.randomUUID();
@@ -454,14 +514,84 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       email: input.email,
       full_name: input.full_name,
       role: input.role ?? UserRole.TECHNICIAN,
+      organization_id: organizationId ?? undefined,
     });
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(mapInviteError(error.code, error.message));
+    }
+
+    await refreshInviteAndMembershipState();
+    const result = data as InviteFunctionResponse;
+    return {
+      invited_user_id: result.invited_user_id ?? '',
+      invite_sent: result.invite_sent,
+    };
+  };
+
+  const changeUserRole = async (id: string, role: UserRole) => {
+    if (!supabase || !organizationId) {
+      const next = teamMembers.map((member) => (member.id === id ? { ...member, role } : member));
+      refreshUsersFromList(next);
+      return;
+    }
+
+    const { error } = await changeUserRoleRow(organizationId, id, role);
+    if (error) {
+      throw new Error(mapRoleChangeError(error.code as ManageUserRoleErrorCode | undefined, error.message));
     }
 
     await loadResources();
-    return data as { invited_user_id: string; invite_sent: boolean };
+    if (session?.user?.id === id) {
+      await refreshProfile();
+    }
+  };
+
+  const revokeInvite = async (inviteId: string) => {
+    if (!supabase) {
+      return;
+    }
+
+    const { error } = await inviteTechnicianFn({
+      email: '',
+      full_name: '',
+      role: UserRole.TECHNICIAN,
+      action: 'revoke',
+      invite_id: inviteId,
+      organization_id: organizationId ?? undefined,
+    });
+
+    if (error) {
+      throw new Error(mapInviteError(error.code, error.message));
+    }
+
+    await refreshInviteAndMembershipState();
+  };
+
+  const resendInvite = async (invite: OrganizationInvite) => {
+    if (!supabase) {
+      return { resent: false, alreadyExists: false };
+    }
+
+    const { data, error } = await inviteTechnicianFn({
+      email: invite.email,
+      full_name: invite.email,
+      role: invite.role,
+      action: 'resend',
+      invite_id: invite.id,
+      organization_id: organizationId ?? undefined,
+    });
+
+    if (error) {
+      throw new Error(mapInviteError(error.code, error.message));
+    }
+
+    await refreshInviteAndMembershipState();
+    const result = data as InviteFunctionResponse | null;
+    return {
+      resent: Boolean(result?.invite_sent),
+      alreadyExists: Boolean(result?.already_exists),
+    };
   };
 
   const importCustomersAssets = async (rows: CsvImportRow[], dryRun = false): Promise<CsvImportResult> => {
@@ -546,6 +676,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       technicians,
       teamMembers,
       inventoryItems,
+      pendingInvites,
       loading,
       addCustomer,
       updateCustomer,
@@ -555,10 +686,9 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       deleteAsset,
       addTechnician,
       inviteTechnician,
-      deactivateUser,
-      reactivateUser,
       changeUserRole,
-      deleteUserHard,
+      revokeInvite,
+      resendInvite,
       importCustomersAssets,
       getAssetName,
       getCustomerName,
@@ -567,7 +697,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       getTechnicianById,
       reload: loadResources,
     }),
-    [customers, assets, technicians, teamMembers, inventoryItems, loading, organizationId],
+    [customers, assets, technicians, teamMembers, inventoryItems, pendingInvites, loading, organizationId],
   );
 
   return <ResourceContext.Provider value={value}>{children}</ResourceContext.Provider>;
