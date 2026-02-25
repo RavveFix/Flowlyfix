@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/state/AuthContext';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { supabase } from '@/shared/lib/supabase/client';
@@ -7,6 +8,8 @@ import { supabase } from '@/shared/lib/supabase/client';
 export const AuthPage: React.FC = () => {
   const { signIn, isConfigured, runtimeAuthMode, profileError } = useAuth();
   const { t } = useLanguage();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isDemoMode = runtimeAuthMode === 'demo';
   const [email, setEmail] = useState(isDemoMode ? 'admin@flowly.io' : '');
   const [password, setPassword] = useState(isDemoMode ? 'password123' : '');
@@ -14,6 +17,25 @@ export const AuthPage: React.FC = () => {
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const selfSignupEnabled = ((import.meta as any).env?.VITE_ENABLE_SELF_SIGNUP ?? '').toString().toLowerCase() === 'true';
+
+  React.useEffect(() => {
+    const search = new URLSearchParams(location.search);
+    const hashRaw = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
+    const hash = new URLSearchParams(hashRaw);
+    const hasCallbackPayload =
+      search.has('code') ||
+      search.has('token_hash') ||
+      search.has('type') ||
+      hash.has('access_token') ||
+      hash.has('refresh_token');
+
+    if (!hasCallbackPayload) {
+      return;
+    }
+
+    navigate(`/auth/callback${location.search}${location.hash}`, { replace: true });
+  }, [location.hash, location.search, navigate]);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -121,6 +143,15 @@ export const AuthPage: React.FC = () => {
           >
             {resetting ? t('auth.password_reset_sending') : t('auth.forgot_password')}
           </button>
+
+          {selfSignupEnabled && (
+            <Link
+              to="/signup"
+              className="inline-flex text-sm font-semibold text-slate-700 hover:text-slate-900"
+            >
+              Skapa nytt företag
+            </Link>
+          )}
         </form>
       </div>
     </div>

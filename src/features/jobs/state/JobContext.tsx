@@ -12,7 +12,7 @@ import {
   WorkOrderPartLog,
   WorkOrderTimeLog,
 } from '@/shared/types';
-import { supabase, isSupabaseConfigured } from '@/shared/lib/supabase/client';
+import { supabase, isSupabaseConfigured, runtimeAuthMode } from '@/shared/lib/supabase/client';
 import { useAuth } from '@/features/auth/state/AuthContext';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { countMutations, enqueueMutation, listMutations, removeMutation } from '@/features/jobs/sync/mutationQueue';
@@ -119,9 +119,11 @@ const DEMO_JOBS: WorkOrder[] = [
 ];
 
 export const JobProvider = ({ children }: { children?: ReactNode }) => {
-  const { profile, user, loading: authLoading } = useAuth();
+  const { profile, user, session, authState, activeOrganizationId, activeRole, loading: authLoading } = useAuth();
   const { t } = useLanguage();
-  const organizationId = profile?.organization_id;
+  const organizationId = activeOrganizationId;
+  const hasSession = Boolean(session?.access_token);
+  const isAuthenticated = authState === 'authenticated' && hasSession;
   const [jobs, setJobs] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
@@ -191,10 +193,25 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
   };
 
   const fetchJobs = async () => {
-    if (authLoading) return;
+    if (authLoading || authState === 'bootstrapping') {
+      setLoading(true);
+      return;
+    }
+
+    if (runtimeAuthMode === 'demo') {
+      setJobs(DEMO_JOBS);
+      setLoading(false);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setJobs([]);
+      setLoading(false);
+      return;
+    }
 
     if (!supabase || !isSupabaseConfigured || !organizationId) {
-      setJobs(DEMO_JOBS);
+      setJobs([]);
       setLoading(false);
       return;
     }
@@ -203,7 +220,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
 
     const { data, error } = await fetchWorkOrdersByOrganization({
       organizationId,
-      role: profile?.role,
+      role: activeRole ?? undefined,
       userId: user?.id ?? undefined,
     });
 
@@ -294,7 +311,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
     refreshPendingMutations().catch((error) => {
       console.error('refreshPendingMutations failed:', error);
     });
-  }, [organizationId, authLoading, profile?.role, user?.id]);
+  }, [organizationId, authLoading, authState, isAuthenticated, activeRole, user?.id]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -381,7 +398,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [organizationId, profile?.role]);
+  }, [organizationId, activeRole]);
 
   const addJob = async (job: Partial<WorkOrder>) => {
     const newWorkOrder: WorkOrder = {

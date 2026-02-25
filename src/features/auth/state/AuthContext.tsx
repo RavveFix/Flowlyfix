@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, runtimeAuthMode, supabase } from '@/shared/lib/supabase/client';
-import type { RuntimeAuthMode } from '@/shared/config/runtime';
-import { Profile, UserRole, UserStatus } from '@/shared/types';
+import { runtimeConfig, type RuntimeAuthMode } from '@/shared/config/runtime';
+import { OrganizationMembership, Profile, UserRole, UserStatus } from '@/shared/types';
 
 export type AuthState = 'bootstrapping' | 'authenticated' | 'unauthenticated' | 'profile_error';
 
@@ -15,6 +15,9 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  memberships: OrganizationMembership[];
+  activeOrganizationId: string | null;
+  activeRole: UserRole | null;
   loading: boolean;
   authState: AuthState;
   profileError: string | null;
@@ -25,6 +28,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   retryProfileLoad: () => Promise<void>;
+  switchActiveOrganization: (organizationId: string) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +36,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const DEMO_PROFILE: Profile = {
   id: 'demo-admin',
   organization_id: 'demo-org',
+  active_organization_id: 'demo-org',
   email: 'admin@flowly.io',
   full_name: 'Demo Admin',
   role: UserRole.ADMIN,
@@ -41,11 +46,34 @@ const DEMO_PROFILE: Profile = {
   updated_at: new Date().toISOString(),
 };
 
+const DEMO_MEMBERSHIPS: OrganizationMembership[] = [
+  {
+    id: 'demo-membership-1',
+    user_id: 'demo-admin',
+    organization_id: 'demo-org',
+    role: UserRole.ADMIN,
+    status: UserStatus.ACTIVE,
+    is_default: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    organization: {
+      id: 'demo-org',
+      name: 'Demo Organization',
+      org_number: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  },
+];
+
 const PROFILE_RETRY_BACKOFF_MS = [300, 800, 1500] as const;
 const SESSION_RECOVERY_BACKOFF_MS = [150, 500, 1200, 2500] as const;
 
-interface ProfileLoadResult {
+interface IdentityLoadResult {
   profile: Profile | null;
+  memberships: OrganizationMembership[];
+  activeOrganizationId: string | null;
+  activeRole: UserRole | null;
   error: string | null;
   transientFailure: boolean;
 }
@@ -76,16 +104,6 @@ function getErrorMessage(error: unknown) {
   return String(error);
 }
 
-function getErrorCode(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const maybeCode = (error as { code?: unknown }).code;
-    if (typeof maybeCode === 'string') {
-      return maybeCode;
-    }
-  }
-  return '';
-}
-
 function getErrorStatus(error: unknown) {
   if (typeof error === 'object' && error !== null && 'status' in error) {
     const maybeStatus = Number((error as { status?: unknown }).status);
@@ -109,6 +127,9 @@ function isTransientProfileError(error: unknown) {
 export const AuthProvider = ({ children }: { children?: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
+  const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(null);
+  const [activeRole, setActiveRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState<AuthState>('bootstrapping');
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -120,7 +141,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
   const authStateRef = useRef<AuthState>('bootstrapping');
 
   const debugLog = useCallback((message: string, payload?: unknown) => {
-    if (!(import.meta as any).env?.DEV) {
+    if (!(import.meta as any).env?.DEV || !runtimeConfig.authDebugEnabled) {
       return;
     }
 
@@ -143,39 +164,178 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     });
   }, []);
 
-  const fetchProfileWithRetry = useCallback(async (userId: string): Promise<ProfileLoadResult> => {
+  const fetchIdentityWithRetry = useCallback(async (userId: string): Promise<IdentityLoadResult> => {
     let lastError: unknown = null;
 
     if (!supabase) {
       return {
         profile: null,
+        memberships: [],
+        activeOrganizationId: null,
+        activeRole: null,
         error: 'Supabase client unavailable',
         transientFailure: false,
       };
     }
 
     for (let attempt = 0; attempt <= PROFILE_RETRY_BACKOFF_MS.length; attempt += 1) {
-      const attemptNo = attempt + 1;
-
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
+        const [profileRes, membershipsRes] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+          supabase
+            .from('organization_memberships')
+            .select('id, user_id, organization_id, role, status, is_default, created_at, updated_at, organization:organizations(*)')
+            .eq('user_id', userId)
+            .order('is_default', { ascending: false })
+            .order('created_at', { ascending: true }),
+        ]);
 
-        if (error) {
-          throw error;
+        if (profileRes.error) {
+          throw profileRes.error;
         }
 
-        if (!data) {
-          const profileNotFound = new Error('Profile not found');
-          (profileNotFound as Error & { code?: string }).code = 'PROFILE_NOT_FOUND';
-          throw profileNotFound;
+        if (!profileRes.data) {
+          throw new Error('Profile not found');
         }
+
+        const profileData = profileRes.data as Profile;
+        const buildLegacyIdentity = (reason: string): IdentityLoadResult | null => {
+          const legacyOrganizationId =
+            (profileData.active_organization_id as string | null | undefined) ??
+            (profileData.organization_id as string | null | undefined) ??
+            null;
+          const legacyRole = (profileData.role as UserRole | null | undefined) ?? null;
+          const legacyStatus = (profileData.status as UserStatus | null | undefined) ?? null;
+
+          if (!legacyOrganizationId || !legacyRole || legacyStatus !== UserStatus.ACTIVE) {
+            return null;
+          }
+
+          const now = new Date().toISOString();
+          const legacyMembership: OrganizationMembership = {
+            id: `legacy-${userId}-${legacyOrganizationId}`,
+            user_id: userId,
+            organization_id: legacyOrganizationId,
+            role: legacyRole,
+            status: legacyStatus,
+            is_default: true,
+            created_at: profileData.created_at ?? now,
+            updated_at: profileData.updated_at ?? now,
+            organization: null,
+          };
+
+          const hydratedProfile: Profile = {
+            ...profileData,
+            organization_id: legacyOrganizationId,
+            active_organization_id: legacyOrganizationId,
+            role: legacyRole,
+            status: legacyStatus,
+          };
+
+          debugLog('identity.legacy_fallback', {
+            userId,
+            reason,
+            organizationId: legacyOrganizationId,
+            role: legacyRole,
+          });
+
+          return {
+            profile: hydratedProfile,
+            memberships: [legacyMembership],
+            activeOrganizationId: legacyOrganizationId,
+            activeRole: legacyRole,
+            error: null,
+            transientFailure: false,
+          };
+        };
+
+        if (membershipsRes.error) {
+          const membershipErrorCode =
+            typeof (membershipsRes.error as { code?: unknown }).code === 'string'
+              ? ((membershipsRes.error as { code: string }).code ?? '')
+              : '';
+          const membershipErrorMessage = getErrorMessage(membershipsRes.error).toLowerCase();
+          const missingMembershipRelation =
+            membershipErrorCode === '42P01' ||
+            (membershipErrorMessage.includes('organization_memberships') &&
+              (membershipErrorMessage.includes('does not exist') || membershipErrorMessage.includes('undefined table')));
+
+          if (missingMembershipRelation) {
+            const legacyIdentity = buildLegacyIdentity('memberships_relation_missing');
+            if (legacyIdentity) {
+              return legacyIdentity;
+            }
+          }
+
+          throw membershipsRes.error;
+        }
+
+        const rawMemberships = (membershipsRes.data as any[]) ?? [];
+        const allMemberships: OrganizationMembership[] = rawMemberships
+          .map((item) => {
+            const organization = Array.isArray(item.organization) ? item.organization[0] ?? null : item.organization ?? null;
+            return {
+              id: item.id,
+              user_id: item.user_id,
+              organization_id: item.organization_id,
+              role: item.role,
+              status: item.status,
+              is_default: Boolean(item.is_default),
+              created_at: item.created_at,
+              updated_at: item.updated_at,
+              organization,
+            } as OrganizationMembership;
+          })
+          .filter((item) => item && item.organization_id);
+
+        const activeMemberships = allMemberships.filter((item) => item.status === UserStatus.ACTIVE);
+
+        const preferredOrgId = profileData.active_organization_id as string | null;
+        const chosenMembership =
+          activeMemberships.find((item) => item.organization_id === preferredOrgId) ??
+          activeMemberships.find((item) => item.is_default) ??
+          activeMemberships[0] ??
+          null;
+
+        if (!chosenMembership) {
+          throw new Error('No active organization membership found');
+        }
+
+        debugLog('identity.membership_selected', {
+          userId,
+          activeMembershipCount: activeMemberships.length,
+          preferredOrgId,
+          selectedOrganizationId: chosenMembership.organization_id,
+          selectedRole: chosenMembership.role,
+        });
+
+        // Keep DB context aligned with the org selected from memberships.
+        // Edge functions read profiles.active_organization_id for authz.
+        if (preferredOrgId !== chosenMembership.organization_id) {
+          const { error: switchError } = await supabase.functions.invoke('switch-active-organization', {
+            body: {
+              organization_id: chosenMembership.organization_id,
+            },
+          });
+
+          if (switchError) {
+            console.warn('active organization sync failed:', switchError.message);
+          }
+        }
+
+        const hydratedProfile: Profile = {
+          ...profileData,
+          organization_id: chosenMembership.organization_id,
+          active_organization_id: chosenMembership.organization_id,
+          role: chosenMembership.role,
+          status: chosenMembership.status,
+        };
 
         return {
-          profile: data as Profile,
+          profile: hydratedProfile,
+          memberships: activeMemberships,
+          activeOrganizationId: chosenMembership.organization_id,
+          activeRole: chosenMembership.role,
           error: null,
           transientFailure: false,
         };
@@ -184,13 +344,6 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         const transientFailure = isTransientProfileError(error);
         const shouldRetry = transientFailure && attempt < PROFILE_RETRY_BACKOFF_MS.length;
 
-        debugLog(`profile load failed (attempt ${attemptNo})`, {
-          transientFailure,
-          message: getErrorMessage(error),
-          code: getErrorCode(error),
-          status: getErrorStatus(error),
-        });
-
         if (shouldRetry) {
           await wait(PROFILE_RETRY_BACKOFF_MS[attempt]);
           continue;
@@ -198,6 +351,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
 
         return {
           profile: null,
+          memberships: [],
+          activeOrganizationId: null,
+          activeRole: null,
           error: getErrorMessage(error),
           transientFailure,
         };
@@ -206,10 +362,13 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
 
     return {
       profile: null,
+      memberships: [],
+      activeOrganizationId: null,
+      activeRole: null,
       error: lastError ? getErrorMessage(lastError) : 'Unknown profile loading error',
       transientFailure: false,
     };
-  }, [debugLog]);
+  }, []);
 
   const recoverSessionWithRetry = useCallback(async () => {
     if (!supabase) {
@@ -225,15 +384,10 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         }
 
         if (data.session) {
-          debugLog('session recovered after transient null session');
           return data.session;
         }
-      } catch (error) {
-        debugLog(`session recovery attempt ${attempt + 1} failed`, {
-          message: getErrorMessage(error),
-          code: getErrorCode(error),
-          status: getErrorStatus(error),
-        });
+      } catch {
+        // no-op
       }
 
       if (attempt < SESSION_RECOVERY_BACKOFF_MS.length) {
@@ -242,117 +396,108 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     }
 
     return null;
-  }, [debugLog]);
+  }, []);
 
-  const applySession = useCallback(async (nextSession: Session | null, options: ApplySessionOptions) => {
-    const token = ++requestTokenRef.current;
-    const shouldBoot = options.showBoot ?? false;
-    const allowRecovery = options.allowNullSessionRecovery ?? false;
+  const applySession = useCallback(
+    async (nextSession: Session | null, options: ApplySessionOptions) => {
+      const token = ++requestTokenRef.current;
+      const shouldBoot = options.showBoot ?? false;
+      const allowRecovery = options.allowNullSessionRecovery ?? false;
 
-    if (options.eventName) {
-      markAuthEvent(options.eventName);
-    }
-
-    if (shouldBoot) {
-      setLoading(true);
-      setAuthState('bootstrapping');
-    }
-
-    if (nextSession) {
-      setProfileError(null);
-    }
-
-    if (nextSession || !allowRecovery) {
-      setSession(nextSession);
-    }
-
-    let resolvedSession = nextSession;
-
-    if (!resolvedSession && allowRecovery) {
-      const recoveredSession = await recoverSessionWithRetry();
-      if (token !== requestTokenRef.current) return;
-
-      if (recoveredSession) {
-        resolvedSession = recoveredSession;
-        setSession(recoveredSession);
-      }
-    }
-
-    debugLog(`applySession(${options.source})`, {
-      hasSession: !!resolvedSession,
-      shouldBoot,
-      allowRecovery,
-      event: options.eventName ?? null,
-    });
-
-    if (!resolvedSession) {
-      if (token !== requestTokenRef.current) return;
-
-      if (allowRecovery && authStateRef.current === 'authenticated' && lastKnownProfileRef.current) {
-        setProfile(lastKnownProfileRef.current);
-        setProfileError('Temporary session recovery issue');
-        setAuthState('authenticated');
-        setLoading(false);
-        debugLog('auth state -> authenticated (cached profile after null session)');
-        return;
+      if (options.eventName) {
+        markAuthEvent(options.eventName);
       }
 
-      setSession(null);
-      setProfile(null);
-      lastKnownProfileRef.current = null;
-      setProfileError(null);
-      setAuthState('unauthenticated');
-      setLoading(false);
-      debugLog('auth state -> unauthenticated');
-      return;
-    }
+      if (shouldBoot) {
+        setLoading(true);
+        setAuthState('bootstrapping');
+      }
 
-    const result = await fetchProfileWithRetry(resolvedSession.user.id);
-    if (token !== requestTokenRef.current) return;
+      if (nextSession || !allowRecovery) {
+        setSession(nextSession);
+      }
 
-    if (result.profile) {
-      if (result.profile.status === UserStatus.INACTIVE) {
+      let resolvedSession = nextSession;
+
+      if (!resolvedSession && allowRecovery) {
+        const recoveredSession = await recoverSessionWithRetry();
+        if (token !== requestTokenRef.current) return;
+
+        if (recoveredSession) {
+          resolvedSession = recoveredSession;
+          setSession(recoveredSession);
+        }
+      }
+
+      debugLog(`applySession(${options.source})`, {
+        hasSession: !!resolvedSession,
+        shouldBoot,
+      });
+
+      if (!resolvedSession) {
+        if (token !== requestTokenRef.current) return;
+
+        if (allowRecovery && authStateRef.current === 'authenticated' && lastKnownProfileRef.current) {
+          setProfile(lastKnownProfileRef.current);
+          setProfileError('Temporary session recovery issue');
+          setAuthState('authenticated');
+          setLoading(false);
+          return;
+        }
+
+        setSession(null);
         setProfile(null);
+        setMemberships([]);
+        setActiveOrganizationId(null);
+        setActiveRole(null);
         lastKnownProfileRef.current = null;
-        setProfileError('Your account is deactivated. Contact your administrator.');
+        setProfileError(null);
         setAuthState('unauthenticated');
         setLoading(false);
-        debugLog('auth state -> unauthenticated (inactive profile)');
-        if (supabase) {
-          void supabase.auth.signOut();
-        }
         return;
       }
 
-      setProfile(result.profile);
-      lastKnownProfileRef.current = result.profile;
-      setProfileError(null);
-      setAuthState('authenticated');
-      setLoading(false);
-      debugLog('auth state -> authenticated');
-      return;
-    }
+      const result = await fetchIdentityWithRetry(resolvedSession.user.id);
+      if (token !== requestTokenRef.current) return;
 
-    if (result.transientFailure && lastKnownProfileRef.current) {
-      setProfile(lastKnownProfileRef.current);
-      setProfileError(result.error ?? 'Temporary profile loading issue');
-      setAuthState('authenticated');
-      setLoading(false);
-      debugLog('auth state -> authenticated (cached profile after transient failure)');
-      return;
-    }
+      if (result.profile) {
+        setProfile(result.profile);
+        setMemberships(result.memberships);
+        setActiveOrganizationId(result.activeOrganizationId);
+        setActiveRole(result.activeRole);
+        lastKnownProfileRef.current = result.profile;
+        setProfileError(null);
+        setAuthState('authenticated');
+        setLoading(false);
+        return;
+      }
 
-    setProfile(null);
-    setProfileError(result.error ?? 'Could not load profile');
-    setAuthState('profile_error');
-    setLoading(false);
-    debugLog('auth state -> profile_error', result.error);
-  }, [debugLog, fetchProfileWithRetry, markAuthEvent, recoverSessionWithRetry]);
+      if (result.transientFailure && lastKnownProfileRef.current) {
+        setProfile(lastKnownProfileRef.current);
+        setProfileError(result.error ?? 'Temporary profile loading issue');
+        setAuthState('authenticated');
+        setLoading(false);
+        return;
+      }
+
+      setProfile(null);
+      setMemberships([]);
+      setActiveOrganizationId(null);
+      setActiveRole(null);
+      setProfileError(result.error ?? 'Could not load profile');
+      setAuthState('profile_error');
+      setLoading(false);
+    },
+    [debugLog, fetchIdentityWithRetry, markAuthEvent, recoverSessionWithRetry],
+  );
 
   const refreshProfile = async () => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(DEMO_PROFILE);
+      setMemberships(DEMO_MEMBERSHIPS);
+      setActiveOrganizationId('demo-org');
+      setActiveRole(UserRole.ADMIN);
       setProfileError(null);
       setAuthState('authenticated');
       setLoading(false);
@@ -363,6 +508,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       setSession(null);
       setProfile(null);
+      setMemberships([]);
+      setActiveOrganizationId(null);
+      setActiveRole(null);
       setProfileError('Missing auth configuration');
       setAuthState('unauthenticated');
       setLoading(false);
@@ -403,22 +551,26 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(DEMO_PROFILE);
+      setMemberships(DEMO_MEMBERSHIPS);
+      setActiveOrganizationId('demo-org');
+      setActiveRole(UserRole.ADMIN);
       lastKnownProfileRef.current = DEMO_PROFILE;
       setProfileError(null);
       setAuthState('authenticated');
       setLoading(false);
-      debugLog('auth state -> authenticated (demo mode)');
       return;
     }
 
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       setSession(null);
       setProfile(null);
+      setMemberships([]);
+      setActiveOrganizationId(null);
+      setActiveRole(null);
       lastKnownProfileRef.current = null;
       setProfileError('Missing auth configuration');
       setAuthState('unauthenticated');
       setLoading(false);
-      debugLog('auth state -> unauthenticated (misconfigured mode)');
       return;
     }
 
@@ -436,7 +588,6 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
 
       if (event === 'INITIAL_SESSION') {
         if (initializedRef.current) {
-          debugLog('ignoring duplicate INITIAL_SESSION event');
           return;
         }
 
@@ -468,7 +619,6 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         setSession(nextSession ?? null);
 
         if (nextSession && lastKnownProfileRef.current?.id === nextSession.user.id) {
-          debugLog('token refreshed without profile reload');
           return;
         }
 
@@ -481,20 +631,10 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         return;
       }
 
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         void applySession(nextSession ?? null, {
-          source: 'signed_in',
+          source: event === 'SIGNED_IN' ? 'signed_in' : 'user_updated',
           showBoot: !hasStableProfile,
-          allowNullSessionRecovery: true,
-          eventName: event,
-        });
-        return;
-      }
-
-      if (event === 'USER_UPDATED') {
-        void applySession(nextSession ?? null, {
-          source: 'user_updated',
-          showBoot: false,
           allowNullSessionRecovery: true,
           eventName: event,
         });
@@ -533,11 +673,13 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       } catch (error) {
         if (!active) return;
         setProfile(null);
+        setMemberships([]);
+        setActiveOrganizationId(null);
+        setActiveRole(null);
         lastKnownProfileRef.current = null;
         setProfileError(getErrorMessage(error));
         setAuthState('profile_error');
         setLoading(false);
-        debugLog('bootstrap fallback failed', error);
       }
     }, 1500);
 
@@ -546,7 +688,56 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
-  }, [applySession, debugLog, markAuthEvent]);
+  }, [applySession, markAuthEvent]);
+
+  useEffect(() => {
+    if (runtimeAuthMode !== 'supabase' || !supabase || !session?.user?.id) {
+      return;
+    }
+
+    const userId = session.user.id;
+    let refreshTimer: number | null = null;
+    const scheduleRefresh = (source: string) => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
+      refreshTimer = window.setTimeout(() => {
+        debugLog('identity.realtime_refresh', { source, userId });
+        void refreshProfile();
+      }, 200);
+    };
+
+    const channel = supabase
+      .channel(`auth-identity-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_memberships',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => scheduleRefresh('organization_memberships'),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`,
+        },
+        () => scheduleRefresh('profiles'),
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [debugLog, refreshProfile, runtimeAuthMode, session?.user?.id]);
 
   const signIn = async (email: string, password: string) => {
     if (runtimeAuthMode === 'demo') {
@@ -556,6 +747,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       };
       setSession(null);
       setProfile(demoProfile);
+      setMemberships(DEMO_MEMBERSHIPS);
+      setActiveOrganizationId('demo-org');
+      setActiveRole(UserRole.ADMIN);
       lastKnownProfileRef.current = demoProfile;
       setProfileError(null);
       setAuthState('authenticated');
@@ -579,6 +773,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(null);
+      setMemberships([]);
+      setActiveOrganizationId(null);
+      setActiveRole(null);
       lastKnownProfileRef.current = null;
       setProfileError(null);
       setAuthState('unauthenticated');
@@ -589,6 +786,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       setSession(null);
       setProfile(null);
+      setMemberships([]);
+      setActiveOrganizationId(null);
+      setActiveRole(null);
       lastKnownProfileRef.current = null;
       setProfileError(null);
       setAuthState('unauthenticated');
@@ -599,11 +799,31 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     await supabase.auth.signOut();
   };
 
+  const switchActiveOrganization = async (organizationId: string) => {
+    if (runtimeAuthMode !== 'supabase' || !supabase) {
+      return { error: 'Organization switch is only available in Supabase mode.' };
+    }
+
+    const { error } = await supabase.functions.invoke('switch-active-organization', {
+      body: { organization_id: organizationId },
+    });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    await refreshProfile();
+    return {};
+  };
+
   const value = useMemo<AuthContextType>(
     () => ({
       session,
       user: session?.user ?? null,
       profile,
+      memberships,
+      activeOrganizationId,
+      activeRole,
       loading,
       authState,
       profileError,
@@ -614,8 +834,24 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       signOut,
       refreshProfile,
       retryProfileLoad,
+      switchActiveOrganization,
     }),
-    [session, profile, loading, authState, profileError, authEventDebug, signIn, signOut, refreshProfile, retryProfileLoad],
+    [
+      session,
+      profile,
+      memberships,
+      activeOrganizationId,
+      activeRole,
+      loading,
+      authState,
+      profileError,
+      authEventDebug,
+      signIn,
+      signOut,
+      refreshProfile,
+      retryProfileLoad,
+      switchActiveOrganization,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

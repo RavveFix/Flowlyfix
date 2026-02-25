@@ -14,7 +14,7 @@
     "ops:sync-ci-secrets": "bash scripts/sync-ci-secrets.sh",
     "smoke:auth": "npx playwright test tests/e2e/auth-refresh-stability.spec.ts tests/e2e/admin-nav-stability.spec.ts tests/e2e/logout-login-stability.spec.ts --reporter=line",
     "smoke:host-normalization": "npx playwright test tests/e2e/host-normalization.spec.ts --reporter=line",
-    "smoke:admin": "npx playwright test tests/e2e/flowly-billing.smoke.spec.ts tests/e2e/flowly-admin-ops.smoke.spec.ts tests/e2e/invite-technician.smoke.spec.ts --reporter=line",
+    "smoke:admin": "npx playwright test tests/e2e/flowly-billing.smoke.spec.ts tests/e2e/flowly-admin-ops.smoke.spec.ts tests/e2e/invite-technician.smoke.spec.ts --workers=1 --reporter=line",
     "build:mobile": "npm run build",
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",

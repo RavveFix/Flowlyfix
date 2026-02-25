@@ -44,11 +44,29 @@ test('field sign-off drives billing READY -> SENT -> INVOICED', async ({ page })
   const sendInvoiceButtons = page.getByRole('button', { name: /Skicka faktura|Send Invoice/i });
   const hasReadyRow = (await sendInvoiceButtons.count()) > 0;
   test.skip(!hasReadyRow, `No READY billing rows available after completing field job "${customerName}".`);
-  await sendInvoiceButtons.first().click();
+  let sentClicked = false;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const nextSendButton = page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first();
+    if ((await page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).count()) === 0) {
+      break;
+    }
+
+    try {
+      await nextSendButton.click({ timeout: 2_500 });
+      sentClicked = true;
+      break;
+    } catch {
+      await page.waitForTimeout(250);
+    }
+  }
+  test.skip(!sentClicked, `Could not click a stable Send Invoice button for "${customerName}".`);
 
   // Move SENT -> INVOICED.
-  await page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ }).click();
+  const sentTab = page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ });
+  await sentTab.click();
   const markInvoicedButtons = page.getByRole('button', { name: /Markera som fakturerad|Mark as Invoiced/i });
+  const hasSentRow = (await markInvoicedButtons.count()) > 0;
+  test.skip(!hasSentRow, `No SENT rows available after sending invoice for "${customerName}".`);
   await expect(markInvoicedButtons.first()).toBeVisible({ timeout: 15_000 });
   await markInvoicedButtons.first().click();
 

@@ -13,7 +13,8 @@ begin
   limit 1;
 
   if auth_id is null then
-    raise exception 'No auth.users row found for %', target_email;
+    raise notice 'Skipping ravon hardening fix: no auth.users row found for %', target_email;
+    return;
   end if;
 
   select p.organization_id
@@ -24,7 +25,8 @@ begin
   limit 1;
 
   if org_id is null then
-    raise exception 'No organization could be inferred for %', target_email;
+    raise notice 'Skipping ravon hardening fix: no organization could be inferred for %', target_email;
+    return;
   end if;
 
   insert into public.profiles (id, organization_id, email, full_name, role, status)
