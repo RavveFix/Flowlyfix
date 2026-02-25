@@ -1,6 +1,7 @@
 import { expect, Page } from '@playwright/test';
 
 const LOGIN_BUTTON_NAME = /Logga in|Sign in/i;
+const LOGIN_BUSY_BUTTON_NAME = /Loggar in|Signing in/i;
 const LOGIN_PATH_RE = /\/login(?:\?|$)/;
 const DEBUG_AUTH_HELPER = process.env.DEBUG_E2E_AUTH_HELPER === '1';
 
@@ -36,6 +37,7 @@ async function waitForLoginForm(page: Page, timeout = 20_000) {
 async function waitForLoginOrAuthenticated(page: Page, timeout = 60_000) {
   const startedAt = Date.now();
   let iteration = 0;
+  let loginVisibleSince: number | null = null;
   while (Date.now() - startedAt < timeout) {
     iteration += 1;
     if (DEBUG_AUTH_HELPER && iteration % 3 === 1) {
@@ -53,8 +55,23 @@ async function waitForLoginOrAuthenticated(page: Page, timeout = 60_000) {
       return 'authenticated' as const;
     }
 
-    if (await waitForLoginForm(page, 1_500)) {
-      return 'login' as const;
+    const loginVisible = await waitForLoginForm(page, 1_500);
+    if (loginVisible) {
+      if (loginVisibleSince === null) {
+        loginVisibleSince = Date.now();
+      }
+
+      const loginSubmitButton = page.locator('button[type="submit"]').first();
+      const submitDisabled = await loginSubmitButton.isDisabled().catch(() => false);
+      const busyButtonVisible = await page.getByRole('button', { name: LOGIN_BUSY_BUTTON_NAME }).isVisible({ timeout: 250 }).catch(() => false);
+      const loginVisibleMs = Date.now() - loginVisibleSince;
+
+      // Ignore transient login form state immediately after submit while auth redirects.
+      if (!submitDisabled && !busyButtonVisible && loginVisibleMs >= 3_000) {
+        return 'login' as const;
+      }
+    } else {
+      loginVisibleSince = null;
     }
 
     const currentPath = (() => {
@@ -72,6 +89,16 @@ async function waitForLoginOrAuthenticated(page: Page, timeout = 60_000) {
   }
 
   return 'timeout' as const;
+}
+
+async function readVisibleLoginError(page: Page) {
+  const errorPanel = page.locator('.text-red-700').first();
+  const visible = await errorPanel.isVisible({ timeout: 750 }).catch(() => false);
+  if (!visible) {
+    return '';
+  }
+
+  return (await errorPanel.innerText({ timeout: 2_000 }).catch(() => '')).trim();
 }
 
 async function resetBrowserAuthState(page: Page) {
@@ -136,7 +163,7 @@ export async function ensureAuthenticated(page: Page) {
     return;
   }
 
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (page.isClosed()) {
       throw new Error('Browser page was closed before authentication could complete.');
     }
@@ -146,7 +173,7 @@ export async function ensureAuthenticated(page: Page) {
       await safeGotoLogin(page);
     }
 
-    const firstState = await waitForLoginOrAuthenticated(page, 30_000);
+    const firstState = await waitForLoginOrAuthenticated(page, 12_000);
     if (DEBUG_AUTH_HELPER) {
       // eslint-disable-next-line no-console
       console.log('[e2e-auth] firstState', { attempt, firstState, url: page.url() });
@@ -162,7 +189,7 @@ export async function ensureAuthenticated(page: Page) {
       await resetBrowserAuthState(page);
     }
 
-    const secondState = await waitForLoginOrAuthenticated(page, 60_000);
+    const secondState = await waitForLoginOrAuthenticated(page, 18_000);
     if (DEBUG_AUTH_HELPER) {
       // eslint-disable-next-line no-console
       console.log('[e2e-auth] secondState', { attempt, secondState, url: page.url() });
@@ -184,7 +211,7 @@ export async function ensureAuthenticated(page: Page) {
     await page.locator('input[type="password"]').fill(password);
     await loginButton.click({ timeout: 10_000 });
 
-    const postLoginState = await waitForLoginOrAuthenticated(page, 60_000);
+    const postLoginState = await waitForLoginOrAuthenticated(page, 18_000);
     if (DEBUG_AUTH_HELPER) {
       // eslint-disable-next-line no-console
       console.log('[e2e-auth] postLoginState', { attempt, postLoginState, url: page.url() });
@@ -198,9 +225,9 @@ export async function ensureAuthenticated(page: Page) {
     }
 
     if (postLoginState === 'login') {
-      const loginError = await page.locator('.text-red-700').first().innerText().catch(() => '');
-      if (loginError.trim().length > 0) {
-        throw new Error(`Login failed: ${loginError.trim()}`);
+      const loginError = await readVisibleLoginError(page);
+      if (loginError.length > 0) {
+        throw new Error(`Login failed: ${loginError}`);
       }
     }
 
@@ -208,9 +235,8 @@ export async function ensureAuthenticated(page: Page) {
     await safeGotoLogin(page);
   }
 
-  const errorPanel = page.locator('.text-red-700').first();
-  const visibleError = (await errorPanel.isVisible().catch(() => false)) ? await errorPanel.innerText() : null;
+  const visibleError = await readVisibleLoginError(page);
   throw new Error(
-    `Authentication did not stabilize after retries. Current URL: ${page.url()}${visibleError ? ` | UI error: ${visibleError}` : ''}`,
+    `Authentication did not stabilize after retries. Current URL: ${page.url()}${visibleError.length > 0 ? ` | UI error: ${visibleError}` : ''}`,
   );
 }
