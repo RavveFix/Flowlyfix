@@ -24,7 +24,6 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const labels = new Set((pr.labels || []).map((l) => l.name));
-            const requiredTracks = ['agent-track-1', 'agent-track-2', 'agent-track-3'];
 
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
@@ -48,9 +47,6 @@ jobs:
             });
 
             const errors = [];
-            if (!requiredTracks.some((track) => labels.has(track))) {
-              errors.push(`Missing one required lane label: ${requiredTracks.join(', ')}`);
-            }
             if (touchesDb && !labels.has('db-change')) {
               errors.push('This PR changes supabase migrations/functions and must include label: db-change');
             }

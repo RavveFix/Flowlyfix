@@ -1,15 +1,3 @@
-- name: agent-track-1
-  color: "1f6feb"
-  description: "Agent lane 1 (required: one agent-track label per PR)."
-
-- name: agent-track-2
-  color: "0e8a16"
-  description: "Agent lane 2 (required: one agent-track label per PR)."
-
-- name: agent-track-3
-  color: "fbca04"
-  description: "Agent lane 3 (required: one agent-track label per PR)."
-
 - name: db-change
   color: "d93f0b"
   description: "PR changes Supabase migrations or edge functions."

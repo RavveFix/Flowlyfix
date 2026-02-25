@@ -1,6 +1,5 @@
 ## Scope
 - Ticket/Issue:
-- Agent lane label (`agent-track-1|2|3`):
 - Summary of change:
 
 ## Test Evidence
