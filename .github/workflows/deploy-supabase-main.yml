@@ -1,0 +1,107 @@
+name: deploy-supabase-main
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+      - 'scripts/ci/supabase-verify.sql'
+
+concurrency:
+  group: deploy-supabase-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy-supabase
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_URL; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Authenticate Supabase CLI
+        run: supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy migrations
+        run: |
+          set -euo pipefail
+          if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+            supabase db push --linked --include-all --password "$SUPABASE_DB_PASSWORD"
+          else
+            supabase db push --linked --include-all
+          fi
+
+      - name: Detect changed edge functions
+        id: changed-functions
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="$(git rev-list --max-parents=0 HEAD)"
+          fi
+
+          mapfile -t names < <(
+            git diff --name-only "$BEFORE" "$AFTER" -- supabase/functions \
+              | awk -F/ '/^supabase\/functions\// { if ($3 != "_shared" && $3 != "") print $3 }' \
+              | sort -u
+          )
+
+          if [ "${#names[@]}" -eq 0 ]; then
+            echo "none=true" >> "$GITHUB_OUTPUT"
+            echo "No changed edge functions in this push."
+            exit 0
+          fi
+
+          printf 'functions=%s\n' "${names[*]}" >> "$GITHUB_OUTPUT"
+          echo "Changed functions: ${names[*]}"
+
+      - name: Deploy changed edge functions
+        if: steps.changed-functions.outputs.none != 'true'
+        run: |
+          set -euo pipefail
+          for fn in ${{ steps.changed-functions.outputs.functions }}; do
+            echo "Deploying edge function: $fn"
+            supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"
+          done
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Post-deploy verification (read-only)
+        run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/supabase-verify.sql

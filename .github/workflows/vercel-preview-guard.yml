@@ -1,0 +1,85 @@
+name: vercel-preview-guard
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  deployments: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: vercel-preview-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for preview deployment URL
+        id: preview
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.pull_request.head.sha;
+
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            let previewUrl = null;
+            for (let attempt = 1; attempt <= 30; attempt++) {
+              const deployments = await github.paginate(github.rest.repos.listDeployments, {
+                owner,
+                repo,
+                sha,
+                per_page: 100,
+              });
+
+              for (const deployment of deployments) {
+                const statuses = await github.paginate(github.rest.repos.listDeploymentStatuses, {
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  per_page: 50,
+                });
+
+                const success = statuses.find((status) => status.state === 'success' && status.target_url);
+                if (success) {
+                  previewUrl = success.target_url;
+                  break;
+                }
+              }
+
+              if (previewUrl) {
+                break;
+              }
+
+              core.info(`No successful deployment URL yet (attempt ${attempt}/30). Waiting 15s...`);
+              await sleep(15000);
+            }
+
+            if (!previewUrl) {
+              core.setFailed('Could not find a successful preview deployment URL for this PR head SHA.');
+              return;
+            }
+
+            core.setOutput('url', previewUrl);
+            core.info(`Preview URL: ${previewUrl}`);
+
+      - name: Check preview responds
+        run: |
+          set -euo pipefail
+          url='${{ steps.preview.outputs.url }}'
+          echo "Checking $url"
+          for i in $(seq 1 20); do
+            if curl -fsS -o /tmp/preview-body.html -L "$url"; then
+              break
+            fi
+            sleep 3
+          done
+
+          curl -fsS -o /tmp/preview-body.html -L "$url"
+          if ! grep -qi "<div id=\"root\">" /tmp/preview-body.html; then
+            echo "Preview HTML did not include expected app root marker."
+            exit 1
+          fi
