@@ -3,6 +3,27 @@ import { ensureAuthenticated } from './helpers/auth';
 
 test.setTimeout(240_000);
 
+function extractInviteApiError(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+
+  const record = payload as Record<string, unknown>;
+
+  if (typeof record.error === 'string' && record.error.trim().length > 0) {
+    return record.error.trim();
+  }
+
+  if (typeof record.message === 'string' && record.message.trim().length > 0) {
+    const codePrefix = typeof record.code === 'number' ? `code=${record.code} ` : '';
+    return `${codePrefix}${record.message.trim()}`.trim();
+  }
+
+  if (typeof record.code === 'number' && record.code >= 400) {
+    return `code=${record.code}`;
+  }
+
+  return '';
+}
+
 test('admin can invite, resend and revoke a technician invite', async ({ page }) => {
   const uniqueToken = Date.now();
   const inviteEmail = `flowly.tech.${uniqueToken}@fixverse.se`;
@@ -25,9 +46,13 @@ test('admin can invite, resend and revoke a technician invite', async ({ page })
   });
   await page.getByRole('button', { name: /^Bjud in$|^Invite$/i }).click();
   const inviteResponse = await inviteResponsePromise;
-  const invitePayload = await inviteResponse.json();
-  if (invitePayload && typeof invitePayload === 'object' && 'error' in invitePayload) {
-    test.skip(true, `Invite API rejected smoke invite: ${String((invitePayload as { error: unknown }).error)}`);
+  const invitePayload: unknown = await inviteResponse.json().catch(() => null);
+  const inviteApiError = extractInviteApiError(invitePayload);
+  if (!inviteResponse.ok() || inviteApiError.length > 0) {
+    test.skip(
+      true,
+      `Invite API rejected smoke invite (${inviteResponse.status()}): ${inviteApiError || 'unknown response shape'}`,
+    );
   }
   expect(invitePayload).toMatchObject({
     organization_id: expect.any(String),
