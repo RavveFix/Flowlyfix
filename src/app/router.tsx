@@ -5,7 +5,6 @@ import { AuthPage } from '@/features/auth/pages/AuthPage';
 import { SignupPage } from '@/features/auth/pages/SignupPage';
 import { AuthConfigErrorPage } from '@/features/auth/pages/AuthConfigErrorPage';
 import { ProfileLoadErrorPage } from '@/features/auth/pages/ProfileLoadErrorPage';
-import { AuthCallbackPage } from '@/features/auth/pages/AuthCallbackPage';
 import { RequireRole } from '@/features/auth/guards/RequireRole';
 import { useAuth } from '@/features/auth/state/AuthContext';
 import { OfflineSyncBanner } from '@/features/jobs/components/OfflineSyncBanner';
@@ -57,8 +56,8 @@ export const AppRouter: React.FC = () => {
   if ((loading || authState === 'bootstrapping') && (location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/auth/callback')) {
     return (
       <Routes>
-        <Route path="/login" element={hasAuthCallbackParams ? <AuthCallbackPage /> : <AuthPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="*" element={<PageLoader />} />
       </Routes>
@@ -77,7 +76,7 @@ export const AppRouter: React.FC = () => {
     return (
       <Routes>
         <Route path="/login" element={<AuthPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/callback" element={<AuthPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -99,12 +98,10 @@ export const AppRouter: React.FC = () => {
         <Route
           path="/login"
           element={
-            hasAuthCallbackParams
-              ? <AuthCallbackPage />
-              : <Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />
+            <Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />
           }
         />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/auth/callback" element={<Navigate to={activeRole === UserRole.TECHNICIAN ? '/field' : '/admin/dashboard'} replace />} />
 
         <Route
           path="/admin/*"
