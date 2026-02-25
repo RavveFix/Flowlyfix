@@ -17,11 +17,13 @@
 - `SUPABASE_DB_PASSWORD` (recommended)
 - `SUPABASE_DB_URL` (read-only verification connection)
 
-## Agent lanes (max 3 parallel)
-- Branch naming: `agent/{ticket-id}-{short-name}`
-- One lane label per PR: `agent-track-1` or `agent-track-2` or `agent-track-3`
-- Add `db-change` if DB migration/function files changed.
-- Add `risk-high` if auth/RLS/policy/permission-sensitive surfaces changed.
+## Branch strategy
+- Source of truth: `README.md` section **Branch Strategy (main + staging)**.
+- Default target branch for feature work is `main`.
+- `staging` is reserved for release-batch validation before a single promotion PR to `main`.
+- Labels are conditional only:
+  - `db-change` if DB migration/function files changed.
+  - `risk-high` if auth/RLS/policy/permission-sensitive surfaces changed.
 
 ## Local developer gates
 - Full local smoke: `npm run ops:smoke`
