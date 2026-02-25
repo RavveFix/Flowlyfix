@@ -71,14 +71,25 @@ jobs:
           set -euo pipefail
           url='${{ steps.preview.outputs.url }}'
           echo "Checking $url"
+          code=""
           for i in $(seq 1 20); do
-            if curl -fsS -o /tmp/preview-body.html -L "$url"; then
+            code="$(curl -sS -o /tmp/preview-body.html -w '%{http_code}' -L "$url" || true)"
+            if [ "$code" = "200" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
               break
             fi
             sleep 3
           done
 
-          curl -fsS -o /tmp/preview-body.html -L "$url"
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "Preview is protected ($code). Treating successful Vercel deployment as sufficient."
+            exit 0
+          fi
+
+          if [ "$code" != "200" ]; then
+            echo "Unexpected HTTP status from preview URL: $code"
+            exit 1
+          fi
+
           if ! grep -qi "<div id=\"root\">" /tmp/preview-body.html; then
             echo "Preview HTML did not include expected app root marker."
             exit 1
