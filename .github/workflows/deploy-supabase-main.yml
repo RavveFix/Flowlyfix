@@ -77,7 +77,14 @@ jobs:
           mapfile -t names < <(
             git diff --name-only "$BEFORE" "$AFTER" -- supabase/functions \
               | awk -F/ '/^supabase\/functions\// { if ($3 != "_shared" && $3 != "") print $3 }' \
-              | sort -u
+              | sort -u \
+              | while read -r fn; do
+                  if [ -f "supabase/functions/$fn/index.ts" ]; then
+                    echo "$fn"
+                  else
+                    echo "Skipping deleted/missing function: $fn" >&2
+                  fi
+                done
           )
 
           if [ "${#names[@]}" -eq 0 ]; then
