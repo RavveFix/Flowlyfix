@@ -96,6 +96,7 @@ Required CI secrets:
 - Conditional labels:
   - `db-change` when `supabase/migrations/**` or `supabase/functions/**` are touched.
   - `risk-high` when auth/RLS/policy/permission-sensitive code is touched.
+  - No special label is required when neither condition is triggered.
 
 PR template: `.github/pull_request_template.md`
 
