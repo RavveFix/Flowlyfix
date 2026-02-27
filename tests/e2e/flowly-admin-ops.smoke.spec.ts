@@ -1,9 +1,30 @@
 import { expect, test } from '@playwright/test';
 import { ensureAuthenticated } from './helpers/auth';
+import { ensureAdminSmokeWorkshopFixture } from './helpers/adminSmokeFixture';
 
 test.setTimeout(180_000);
 
+const STRICT_ADMIN_SMOKE = process.env.E2E_STRICT_ADMIN_SMOKE === '1';
+
+function failOrSkip(shouldSkip: boolean, reason: string) {
+  if (!shouldSkip) {
+    return;
+  }
+
+  if (STRICT_ADMIN_SMOKE) {
+    throw new Error(`Strict admin smoke: ${reason}`);
+  }
+
+  test.skip(true, reason);
+}
+
 test('admin smoke: dispatch, workshop and billing flow', async ({ page }) => {
+  const workshopFixture = await ensureAdminSmokeWorkshopFixture().catch(() => null);
+  failOrSkip(!workshopFixture, 'Could not provision workshop fixture data for admin smoke.');
+  if (!workshopFixture) {
+    return;
+  }
+
   const reportText = `Workshop smoke report ${Date.now()}`;
   const adjustedReport = `${reportText}\nAdminjusterat underlag.`;
 
@@ -34,11 +55,19 @@ test('admin smoke: dispatch, workshop and billing flow', async ({ page }) => {
   await sidebar.getByRole('button', { name: /Verkstad|Workshop/i }).click();
   await page.waitForURL(/\/admin\/workshop/);
   await expect(page.getByText(/Verkstadstavla|Workshop Board/i)).toBeVisible({ timeout: 15_000 });
+  const fixtureWorkshopCard = page
+    .locator('div.cursor-pointer')
+    .filter({ hasText: workshopFixture.description })
+    .first();
+  const fixtureCardVisible = await fixtureWorkshopCard.isVisible({ timeout: 15_000 }).catch(() => false);
   const workshopCards = page.locator('div.cursor-pointer').filter({ has: page.locator('h4') });
   const hasWorkshopCards = (await workshopCards.count()) > 0;
-  test.skip(!hasWorkshopCards, 'No workshop jobs available for admin ops smoke in this environment.');
+  failOrSkip(
+    !fixtureCardVisible && !hasWorkshopCards,
+    'No workshop jobs available for admin ops smoke in this environment.',
+  );
 
-  const firstWorkshopCard = workshopCards.first();
+  const firstWorkshopCard = fixtureCardVisible ? fixtureWorkshopCard : workshopCards.first();
   await expect(firstWorkshopCard).toBeVisible({ timeout: 15_000 });
   const workshopCustomerName = (await firstWorkshopCard.locator('h4').first().innerText()).trim();
   await firstWorkshopCard.click();
@@ -65,27 +94,47 @@ test('admin smoke: dispatch, workshop and billing flow', async ({ page }) => {
   await sidebar.getByRole('button', { name: /Fakturering|Billing/i }).click();
   await page.waitForURL(/\/admin\/billing/);
   await expect(page.getByText(/Faktureringskö|Billing Queue/i)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(workshopCustomerName)).toBeVisible();
-  await expect(page.getByText(reportText)).toBeVisible();
+  const readyFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: reportText })
+    .first();
+  await expect(readyFixtureRow).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole('button', { name: /Redigera underlag|Edit Details/i }).first().click();
+  await readyFixtureRow.getByRole('button', { name: /Redigera underlag|Edit Details/i }).first().click();
   await page.getByPlaceholder(/Beskriv vad som utfördes|Describe what was done/i).fill(adjustedReport);
-  await page.getByRole('button', { name: /Spara underlag|Save Details/i }).first().click();
+  await readyFixtureRow.getByRole('button', { name: /Spara underlag|Save Details/i }).first().click();
+
+  const adjustedFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: adjustedReport })
+    .first();
+  await expect(adjustedFixtureRow).toBeVisible({ timeout: 15_000 });
+
+  await adjustedFixtureRow.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first().click();
+  await page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ }).click();
   await expect(page.getByText(adjustedReport)).toBeVisible();
 
-  await page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first().click();
-  await page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ }).click();
-  await expect(page.getByText(workshopCustomerName)).toBeVisible();
-
-  await page.getByRole('button', { name: /Återöppna|Reopen to Ready/i }).first().click();
+  const sentFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: adjustedReport })
+    .first();
+  await sentFixtureRow.getByRole('button', { name: /Återöppna|Reopen to Ready/i }).first().click();
   await page.getByRole('button', { name: /^(Klar|Ready) \(\d+\)$/ }).click();
-  await expect(page.getByText(workshopCustomerName)).toBeVisible();
+  await expect(page.getByText(adjustedReport)).toBeVisible();
 
-  await page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first().click();
+  const reopenedReadyFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: adjustedReport })
+    .first();
+  await reopenedReadyFixtureRow.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first().click();
   await page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ }).click();
-  await expect(page.getByText(workshopCustomerName)).toBeVisible();
+  await expect(page.getByText(adjustedReport)).toBeVisible();
 
-  await page.getByRole('button', { name: /Markera som fakturerad|Mark as Invoiced/i }).first().click();
+  const sentAgainFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: adjustedReport })
+    .first();
+  await sentAgainFixtureRow.getByRole('button', { name: /Markera som fakturerad|Mark as Invoiced/i }).first().click();
   await page.getByRole('button', { name: /^(Fakturerad|Invoiced) \(\d+\)$/ }).click();
-  await expect(page.getByText(workshopCustomerName)).toBeVisible();
+  await expect(page.getByText(adjustedReport).first()).toBeVisible();
 });

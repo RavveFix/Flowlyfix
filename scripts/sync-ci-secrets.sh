@@ -128,6 +128,8 @@ vite_url="$(read_key "VITE_SUPABASE_URL")"
 vite_anon="$(read_key "VITE_SUPABASE_ANON_KEY")"
 admin_email="$(first_non_empty "$(read_key "E2E_ADMIN_EMAIL")" "$(read_key "ADMIN_EMAIL")" "$(read_key "FLOWLY_ADMIN_EMAIL")")"
 admin_password="$(first_non_empty "$(read_key "E2E_ADMIN_PASSWORD")" "$(read_key "ADMIN_PASSWORD")" "$(read_key "FLOWLY_ADMIN_PASSWORD")")"
+callback_admin_email="$(read_key "E2E_CALLBACK_ADMIN_EMAIL")"
+callback_admin_password="$(read_key "E2E_CALLBACK_ADMIN_PASSWORD")"
 supabase_token="$(read_key "SUPABASE_ACCESS_TOKEN")"
 supabase_ref="$(read_key "SUPABASE_PROJECT_REF")"
 supabase_db_url="$(read_key "SUPABASE_DB_URL")"
@@ -146,6 +148,8 @@ fi
 [ -n "$vite_anon" ] && set_secret "VITE_SUPABASE_ANON_KEY" "$vite_anon" || missing_required+=("VITE_SUPABASE_ANON_KEY")
 [ -n "$admin_email" ] && set_secret "E2E_ADMIN_EMAIL" "$admin_email" || missing_required+=("E2E_ADMIN_EMAIL")
 [ -n "$admin_password" ] && set_secret "E2E_ADMIN_PASSWORD" "$admin_password" || missing_required+=("E2E_ADMIN_PASSWORD")
+[ -n "$callback_admin_email" ] && set_secret "E2E_CALLBACK_ADMIN_EMAIL" "$callback_admin_email" || missing_required+=("E2E_CALLBACK_ADMIN_EMAIL")
+[ -n "$callback_admin_password" ] && set_secret "E2E_CALLBACK_ADMIN_PASSWORD" "$callback_admin_password" || missing_required+=("E2E_CALLBACK_ADMIN_PASSWORD")
 [ -n "$supabase_token" ] && set_secret "SUPABASE_ACCESS_TOKEN" "$supabase_token" || missing_required+=("SUPABASE_ACCESS_TOKEN")
 [ -n "$supabase_ref" ] && set_secret "SUPABASE_PROJECT_REF" "$supabase_ref" || missing_required+=("SUPABASE_PROJECT_REF")
 [ -n "$supabase_db_url" ] && set_secret "SUPABASE_DB_URL" "$supabase_db_url" || missing_required+=("SUPABASE_DB_URL")
@@ -167,6 +171,8 @@ if [ "${#missing_required[@]}" -gt 0 ]; then
   echo "Set missing values and rerun:"
   echo "  gh secret set E2E_ADMIN_EMAIL -R $REPO"
   echo "  gh secret set E2E_ADMIN_PASSWORD -R $REPO"
+  echo "  gh secret set E2E_CALLBACK_ADMIN_EMAIL -R $REPO"
+  echo "  gh secret set E2E_CALLBACK_ADMIN_PASSWORD -R $REPO"
   echo "  gh secret set SUPABASE_ACCESS_TOKEN -R $REPO"
   echo "  gh secret set SUPABASE_DB_URL -R $REPO"
   exit 2

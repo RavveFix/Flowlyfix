@@ -2,6 +2,7 @@
 
 ## CI/CD flow
 - PRs to `main` must pass `label-policy`, `typecheck`, `build`, `smoke-auth`, `smoke-admin`.
+- `smoke-auth` and `smoke-admin` run in strict mode (`E2E_STRICT_*_SMOKE=1`) and fail if any smoke test is skipped.
 - Vercel handles preview deploys per PR and production deploy on merge to `main`.
 - Supabase deploy workflow runs automatically on `main` pushes that touch:
   - `supabase/migrations/**`
@@ -12,6 +13,8 @@
 - `VITE_SUPABASE_ANON_KEY`
 - `E2E_ADMIN_EMAIL`
 - `E2E_ADMIN_PASSWORD`
+- `E2E_CALLBACK_ADMIN_EMAIL`
+- `E2E_CALLBACK_ADMIN_PASSWORD`
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF`
 - `SUPABASE_DB_PASSWORD` (recommended)
