@@ -45,6 +45,7 @@ interface JobContextType {
   setBillingStatus: (workOrderId: string, status: BillingStatus) => Promise<void>;
   getJobById: (jobId: string) => WorkOrder | undefined;
   syncPendingMutations: () => Promise<void>;
+  pushNotification: (entry: Omit<AppNotification, 'id' | 'created_at' | 'read'>) => void;
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
 }
@@ -880,6 +881,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
       setBillingStatus,
       getJobById,
       syncPendingMutations,
+      pushNotification,
       dismissNotification,
       clearNotifications,
     }),

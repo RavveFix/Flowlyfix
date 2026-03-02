@@ -326,6 +326,8 @@ export const sv = {
     'resources.invite_revoked': 'Inbjudan har återkallats.',
     'resources.confirm_role_change': 'Är du säker på att du vill ändra roll för denna användare?',
     'resources.confirm_revoke': 'Är du säker på att du vill återkalla denna inbjudan?',
+    'resources.invalid_email': 'Ogiltig e-postadress.',
+    'resources.invite_sent_success': 'Inbjudan skickad!',
 
     // Settings
     'settings.title': 'Inställningar',

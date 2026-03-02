@@ -326,6 +326,8 @@ export const en = {
     'resources.invite_revoked': 'Invitation has been revoked.',
     'resources.confirm_role_change': 'Are you sure you want to change this user\'s role?',
     'resources.confirm_revoke': 'Are you sure you want to revoke this invitation?',
+    'resources.invalid_email': 'Invalid email address.',
+    'resources.invite_sent_success': 'Invitation sent successfully!',
 
     // Settings
     'settings.title': 'Settings',

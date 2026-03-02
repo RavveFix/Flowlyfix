@@ -4,9 +4,11 @@ import { useResources } from '@/features/resources/state/ResourceContext';
 import { Search, Plus, Trash2, Box, Users, Upload } from 'lucide-react';
 import { Asset, CsvImportResult, UserRole } from '@/shared/types';
 import { CSV_IMPORT_HEADERS, parseCsvImport } from '@/features/resources/lib/csv';
+import { useJobs } from '@/features/jobs/state/JobContext';
 
 export const ResourcesPage: React.FC = () => {
   const { t } = useLanguage();
+  const { pushNotification } = useJobs();
   const {
     assets,
     teamMembers,
@@ -39,6 +41,8 @@ export const ResourcesPage: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [selectedImportFileName, setSelectedImportFileName] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [isInviting, setIsInviting] = useState(false);
   const [inviteInfo, setInviteInfo] = useState<string | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const hasCsvData = csvText.trim().length > 0;
@@ -97,6 +101,18 @@ export const ResourcesPage: React.FC = () => {
     event.preventDefault();
     if (!newTechName || !newTechEmail) return;
 
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!EMAIL_RE.test(newTechEmail)) {
+      setInviteError(t('resources.invalid_email'));
+      return;
+    }
+    if (pendingInviteEmails.has(newTechEmail.toLowerCase())) {
+      setInviteError(t('resources.invite_already_exists').replace('{email}', newTechEmail));
+      return;
+    }
+
+    setIsInviting(true);
+    setInviteError(null);
     try {
       await inviteTechnician({
         full_name: newTechName,
@@ -107,13 +123,16 @@ export const ResourcesPage: React.FC = () => {
       setNewTechName('');
       setNewTechEmail('');
       setNewTechRole(UserRole.TECHNICIAN);
+      pushNotification({ type: 'success', message: t('resources.invite_sent_success') });
     } catch (error) {
       const message = error instanceof Error ? error.message : t('resources.invite_failed');
       if (/unauthorized|session expired|invalid jwt|jwt|401/i.test(message)) {
-        alert(t('resources.session_expired'));
+        pushNotification({ type: 'error', message: t('resources.session_expired') });
         return;
       }
-      alert(message);
+      pushNotification({ type: 'error', message });
+    } finally {
+      setIsInviting(false);
     }
   };
 
@@ -122,7 +141,7 @@ export const ResourcesPage: React.FC = () => {
     try {
       await changeUserRole(id, isAdmin ? UserRole.TECHNICIAN : UserRole.ADMIN);
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+      pushNotification({ type: 'error', message: error instanceof Error ? error.message : t('resources.user_action_failed') });
     }
   };
 
@@ -135,7 +154,7 @@ export const ResourcesPage: React.FC = () => {
       }
       setInviteInfo(t('resources.invite_resent').replace('{email}', invite.email));
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+      pushNotification({ type: 'error', message: error instanceof Error ? error.message : t('resources.user_action_failed') });
     }
   };
 
@@ -145,7 +164,7 @@ export const ResourcesPage: React.FC = () => {
       await revokeInvite(inviteId);
       setInviteInfo(t('resources.invite_revoked'));
     } catch (error) {
-      alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
+      pushNotification({ type: 'error', message: error instanceof Error ? error.message : t('resources.user_action_failed') });
     }
   };
 
@@ -507,10 +526,11 @@ export const ResourcesPage: React.FC = () => {
                   type="email"
                   className="w-full p-2 border rounded-lg"
                   value={newTechEmail}
-                  onChange={(event) => setNewTechEmail(event.target.value)}
+                  onChange={(event) => { setNewTechEmail(event.target.value); setInviteError(null); }}
                   required
                   placeholder={t('resources.email_placeholder')}
                 />
+                {inviteError && <p className="text-red-500 text-sm mt-1">{inviteError}</p>}
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">{t('settings.table.role')}</label>
@@ -524,11 +544,11 @@ export const ResourcesPage: React.FC = () => {
                 </select>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setIsTechModalOpen(false)} className="px-4 py-2 border rounded-lg">
+                <button type="button" onClick={() => { setIsTechModalOpen(false); setInviteError(null); }} className="px-4 py-2 border rounded-lg">
                   {t('common.cancel')}
                 </button>
-                <button type="submit" className="px-4 py-2 bg-docuraft-navy text-white rounded-lg">
-                  {t('resources.invite')}
+                <button type="submit" disabled={isInviting} className="px-4 py-2 bg-docuraft-navy text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isInviting ? '...' : t('resources.invite')}
                 </button>
               </div>
             </form>
