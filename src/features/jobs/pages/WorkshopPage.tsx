@@ -6,9 +6,11 @@ import { JobStatus, JobPriority, WorkOrder, JobType } from '@/shared/types';
 import { CheckInModal } from '@/features/jobs/components/CheckInModal';
 import { useResources } from '@/features/resources/state/ResourceContext';
 import { useAuth } from '@/features/auth/state/AuthContext';
+import { formatDateKeyForDisplay } from '@/shared/lib/planningDate';
 
 export const WorkshopPage: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const locale = language === 'sv' ? 'sv-SE' : 'en-US';
   const { jobs, updateJob, addWorkLog, addWorkPart, completeForBilling } = useJobs();
   const { getCustomerById } = useResources();
   const { profile } = useAuth();
@@ -144,7 +146,7 @@ export const WorkshopPage: React.FC = () => {
                         <h4 className="font-bold text-slate-900 mb-1">{customer?.name || t('common.unknown')}</h4>
                         <p className="text-sm text-slate-600 line-clamp-2 mb-3 leading-relaxed">{job.description}</p>
                         <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-                          <span>{new Date(job.created_at).toLocaleDateString()}</span>
+                          <span>{formatDateKeyForDisplay(job.created_at, locale, { month: 'short', day: 'numeric' })}</span>
                         </div>
                       </div>
                     );

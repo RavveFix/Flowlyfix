@@ -100,9 +100,14 @@ jobs:
         if: steps.changed-functions.outputs.none != 'true'
         run: |
           set -euo pipefail
+          no_verify_jwt_functions=" bootstrap-admin-profile e2e-role-fixture import-customers-assets invite-technician manage-user-role self-signup-organization switch-active-organization "
           for fn in ${{ steps.changed-functions.outputs.functions }}; do
             echo "Deploying edge function: $fn"
-            supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"
+            if [[ "$no_verify_jwt_functions" == *" $fn "* ]]; then
+              supabase functions deploy "$fn" --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+            else
+              supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"
+            fi
           done
 
       - name: Install PostgreSQL client

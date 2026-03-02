@@ -40,6 +40,7 @@ export const en = {
     'common.signing_in': 'Signing in...',
     'common.close': 'Close',
     'common.sign_out': 'Sign out',
+    'common.session_recovering': 'Session recovering...',
 
     // Sidebar
     'nav.dashboard': 'Dashboard',
@@ -442,4 +443,9 @@ export const en = {
     'jobs.new_work_order': 'New work order',
     'jobs.new_service_case': 'New service case',
     'jobs.web_request': 'Web request',
+
+    // Admin layout
+    'admin.active_company': 'Active company',
+    'admin.switching': 'Switching...',
+    'admin.role': 'Role',
   } as const;

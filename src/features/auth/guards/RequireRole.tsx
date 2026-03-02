@@ -11,7 +11,7 @@ interface RequireRoleProps {
 }
 
 export const RequireRole: React.FC<RequireRoleProps> = ({ allow, children }) => {
-  const { profile, activeRole, loading } = useAuth();
+  const { profile, activeRole, loading, authHealth } = useAuth();
   const { t } = useLanguage();
   const location = useLocation();
 
@@ -19,6 +19,17 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ allow, children }) => 
     return (
       <div className="h-screen flex items-center justify-center bg-slate-100 text-slate-600">
         {t('common.loading')}
+      </div>
+    );
+  }
+
+  if (authHealth === 'recovering') {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-100 text-amber-600">
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+          <span>{t('common.session_recovering')}</span>
+        </div>
       </div>
     );
   }

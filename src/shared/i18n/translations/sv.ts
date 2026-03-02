@@ -40,6 +40,7 @@ export const sv = {
     'common.signing_in': 'Loggar in...',
     'common.close': 'Stäng',
     'common.sign_out': 'Logga ut',
+    'common.session_recovering': 'Sessionen \u00e5terst\u00e4lls...',
 
     // Sidebar
     'nav.dashboard': 'Översikt',
@@ -442,4 +443,9 @@ export const sv = {
     'jobs.new_work_order': 'Ny arbetsorder',
     'jobs.new_service_case': 'Nytt serviceärende',
     'jobs.web_request': 'Webbanmälan',
+
+    // Admin layout
+    'admin.active_company': 'Aktivt företag',
+    'admin.switching': 'Byter...',
+    'admin.role': 'Roll',
   } as const;

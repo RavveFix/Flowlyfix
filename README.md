@@ -58,6 +58,10 @@ For real-auth smoke tests, set:
 ```bash
 E2E_ADMIN_EMAIL=...
 E2E_ADMIN_PASSWORD=...
+E2E_CALLBACK_ADMIN_EMAIL=... # dedicated callback test account
+E2E_CALLBACK_ADMIN_PASSWORD=...
+E2E_STRICT_AUTH_SMOKE=0
+E2E_STRICT_ADMIN_SMOKE=0
 ```
 
 ## Automation and CI/CD
@@ -78,6 +82,8 @@ Required CI secrets:
 - `VITE_SUPABASE_ANON_KEY`
 - `E2E_ADMIN_EMAIL`
 - `E2E_ADMIN_PASSWORD`
+- `E2E_CALLBACK_ADMIN_EMAIL`
+- `E2E_CALLBACK_ADMIN_PASSWORD`
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF`
 - `SUPABASE_DB_PASSWORD` (recommended)
@@ -119,6 +125,20 @@ npm run ops:prepush
 npm run ops:changed-smoke
 ```
 
+## Agent Check-in Loop
+
+Start each work session with:
+
+```bash
+npm run agent:checkin
+```
+
+Process:
+
+- Run `npm run agent:checkin` at the start of each session.
+- Present the generated output as a short status plus 2-4 prioritized questions.
+- After finishing implementation work, update `docs/agent-memory.md` with latest status, risks, decisions, and next-pass questions.
+
 ## Branch Protection
 
 Apply recommended protection and labels (repo admin required):
@@ -149,8 +169,13 @@ Apply via Supabase CLI migration flow.
 
 Implemented:
 
+- `bootstrap-admin-profile`
+- `self-signup-organization`
+- `switch-active-organization`
 - `invite-technician`
 - `import-customers-assets`
+- `manage-user-role`
+- `e2e-role-fixture` (test)
 
 Shared helpers:
 
@@ -163,6 +188,10 @@ Required function environment variables:
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `INVITE_REDIRECT_URL` (optional but recommended)
+
+Deployment note:
+
+- Auth-protected functions are deployed with `--no-verify-jwt` in CI and perform auth in-function via `_shared/auth.ts` (`requireAuthenticatedUser` / `requireAdmin`).
 
 ## Mobile (Capacitor)
 
@@ -185,6 +214,10 @@ npm run cap:open:android
 ## Notes
 
 - Runtime auth mode is explicit: use real Supabase by default, or set `VITE_DEMO_MODE=true` for demo mode.
+- `npm run smoke:auth` runs with `--workers=1` to avoid shared-account org-switch races.
+- Callback role-transition smoke (`tests/e2e/auth-org-role-callback.spec.ts`) runs only when dedicated credentials are set:
+  `E2E_CALLBACK_ADMIN_EMAIL` and `E2E_CALLBACK_ADMIN_PASSWORD`.
+- `smoke-admin` provisions deterministic fixture work orders at runtime; CI sets `E2E_STRICT_ADMIN_SMOKE=1` and fails on any skipped admin smoke test.
 - Offline queue (IndexedDB) is implemented for work-order status/log/parts mutations.
 - In-app notifications are available from realtime and offline sync events.
 - Runtime artifacts are ignored: `output/`, `test-results/`, `playwright-report/`, `dist/`.
