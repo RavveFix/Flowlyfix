@@ -315,6 +315,17 @@ export const sv = {
     'resources.hard_delete': 'Radera permanent',
     'resources.confirm_hard_delete': 'Radera användaren permanent?',
     'resources.user_action_failed': 'Kunde inte utföra användaråtgärden',
+    'resources.team_hint': 'Hantera teamet via inbjudningar: bjud in som administratör eller tekniker.',
+    'resources.pending_invites': 'Väntande inbjudningar',
+    'resources.resend': 'Skicka om',
+    'resources.revoke': 'Återkalla',
+    'resources.expires': 'Utgår',
+    'resources.session_expired': 'Sessionen har löpt ut. Logga in igen och försök på nytt.',
+    'resources.invite_resent': 'Inbjudan skickades om till {email}.',
+    'resources.invite_already_exists': 'Inbjudan till {email} skickades inte om: användaren finns redan eller har redan en aktiv inbjudan.',
+    'resources.invite_revoked': 'Inbjudan har återkallats.',
+    'resources.confirm_role_change': 'Är du säker på att du vill ändra roll för denna användare?',
+    'resources.confirm_revoke': 'Är du säker på att du vill återkalla denna inbjudan?',
 
     // Settings
     'settings.title': 'Inställningar',
@@ -362,7 +373,12 @@ export const sv = {
 
     // Mobile / Work Order
     'mobile.my_day': 'Min Dag',
-    'mobile.assigned_jobs': 'Tilldelade Jobb',
+    'mobile.assigned_jobs': 'Mina Jobb',
+    'mobile.available_jobs': 'Lediga Jobb',
+    'mobile.claim_job': 'Ta jobb',
+    'mobile.no_jobs_today': 'Inga jobb idag — njut av ledigheten!',
+    'mobile.no_available_jobs': 'Inga lediga jobb just nu.',
+    'mobile.not_scheduled': 'Ej schemalagd',
     'mobile.simulator_label': 'Interaktiv Tekniker-simulator',
     'wo.start_travel': 'Starta Resa',
     'wo.navigate': 'Navigera till plats',

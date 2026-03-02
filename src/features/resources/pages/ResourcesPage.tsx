@@ -63,9 +63,18 @@ export const ResourcesPage: React.FC = () => {
     [teamMembers, searchTerm],
   );
 
-  const pendingInviteEmails = useMemo(
-    () => new Set(pendingInvites.filter((invite) => invite.status === 'PENDING').map((invite) => invite.email.toLowerCase())),
+  const activePendingInvites = useMemo(
+    () => pendingInvites.filter((invite) => {
+      if (invite.status !== 'PENDING') return false;
+      if (invite.expires_at && new Date(invite.expires_at) < new Date()) return false;
+      return true;
+    }),
     [pendingInvites],
+  );
+
+  const pendingInviteEmails = useMemo(
+    () => new Set(activePendingInvites.map((invite) => invite.email.toLowerCase())),
+    [activePendingInvites],
   );
 
   const handleAddAsset = async (event: React.FormEvent) => {
@@ -101,7 +110,7 @@ export const ResourcesPage: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : t('resources.invite_failed');
       if (/unauthorized|session expired|invalid jwt|jwt|401/i.test(message)) {
-        alert('Sessionen har löpt ut. Logga in igen och försök på nytt.');
+        alert(t('resources.session_expired'));
         return;
       }
       alert(message);
@@ -109,6 +118,7 @@ export const ResourcesPage: React.FC = () => {
   };
 
   const handleToggleRole = async (id: string, isAdmin: boolean) => {
+    if (!window.confirm(t('resources.confirm_role_change'))) return;
     try {
       await changeUserRole(id, isAdmin ? UserRole.TECHNICIAN : UserRole.ADMIN);
     } catch (error) {
@@ -120,19 +130,20 @@ export const ResourcesPage: React.FC = () => {
     try {
       const result = await resendInvite(invite);
       if (result.alreadyExists) {
-        setInviteInfo(`Inbjudan till ${invite.email} skickades inte om: användaren finns redan eller har redan en aktiv inbjudan.`);
+        setInviteInfo(t('resources.invite_already_exists').replace('{email}', invite.email));
         return;
       }
-      setInviteInfo(`Inbjudan skickades om till ${invite.email}.`);
+      setInviteInfo(t('resources.invite_resent').replace('{email}', invite.email));
     } catch (error) {
       alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
     }
   };
 
   const handleRevokeInvite = async (inviteId: string) => {
+    if (!window.confirm(t('resources.confirm_revoke'))) return;
     try {
       await revokeInvite(inviteId);
-      setInviteInfo('Inbjudan har återkallats.');
+      setInviteInfo(t('resources.invite_revoked'));
     } catch (error) {
       alert(error instanceof Error ? error.message : t('resources.user_action_failed'));
     }
@@ -310,7 +321,7 @@ export const ResourcesPage: React.FC = () => {
           ) : (
             <>
               <div className="px-6 py-3 border-b border-gray-100 bg-slate-50 text-xs text-slate-600">
-                Hantera teamet via inbjudningar: bjud in som administratör eller tekniker.
+                {t('resources.team_hint')}
               </div>
               <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-gray-50 text-xs uppercase font-semibold text-slate-500">
@@ -378,10 +389,10 @@ export const ResourcesPage: React.FC = () => {
           )}
         </div>
 
-        {activeTab === 'techs' && pendingInvites.length > 0 && (
+        {activeTab === 'techs' && activePendingInvites.length > 0 && (
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-slate-800">Pending invites</h3>
+              <h3 className="text-sm font-semibold text-slate-800">{t('resources.pending_invites')}</h3>
               {inviteInfo && (
                 <p className="mt-2 text-xs text-amber-700">{inviteInfo}</p>
               )}
@@ -391,12 +402,12 @@ export const ResourcesPage: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4">{t('common.email')}</th>
                   <th className="px-6 py-4">{t('settings.table.role')}</th>
-                  <th className="px-6 py-4">Expires</th>
+                  <th className="px-6 py-4">{t('resources.expires')}</th>
                   <th className="px-6 py-4 text-right">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {pendingInvites.map((invite) => (
+                {activePendingInvites.map((invite) => (
                   <tr key={invite.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">{invite.email}</td>
                     <td className="px-6 py-4">{invite.role}</td>
@@ -407,13 +418,13 @@ export const ResourcesPage: React.FC = () => {
                           onClick={() => handleResendInvite(invite)}
                           className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          Resend
+                          {t('resources.resend')}
                         </button>
                         <button
                           onClick={() => handleRevokeInvite(invite.id)}
                           className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
                         >
-                          Revoke
+                          {t('resources.revoke')}
                         </button>
                       </div>
                     </td>

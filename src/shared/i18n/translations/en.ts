@@ -315,6 +315,17 @@ export const en = {
     'resources.hard_delete': 'Hard delete',
     'resources.confirm_hard_delete': 'Permanently delete this user?',
     'resources.user_action_failed': 'Could not complete user action',
+    'resources.team_hint': 'Manage the team via invitations: invite as admin or technician.',
+    'resources.pending_invites': 'Pending invitations',
+    'resources.resend': 'Resend',
+    'resources.revoke': 'Revoke',
+    'resources.expires': 'Expires',
+    'resources.session_expired': 'Session expired. Please sign in again and retry.',
+    'resources.invite_resent': 'Invitation resent to {email}.',
+    'resources.invite_already_exists': 'Invitation to {email} was not resent: user already exists or has an active invitation.',
+    'resources.invite_revoked': 'Invitation has been revoked.',
+    'resources.confirm_role_change': 'Are you sure you want to change this user\'s role?',
+    'resources.confirm_revoke': 'Are you sure you want to revoke this invitation?',
 
     // Settings
     'settings.title': 'Settings',
@@ -362,7 +373,12 @@ export const en = {
 
     // Mobile / Work Order
     'mobile.my_day': 'My Day',
-    'mobile.assigned_jobs': 'Assigned Jobs',
+    'mobile.assigned_jobs': 'My Jobs',
+    'mobile.available_jobs': 'Available Jobs',
+    'mobile.claim_job': 'Claim job',
+    'mobile.no_jobs_today': 'No jobs today — enjoy the downtime!',
+    'mobile.no_available_jobs': 'No available jobs right now.',
+    'mobile.not_scheduled': 'Not scheduled',
     'mobile.simulator_label': 'Interactive Technician View Simulator',
     'wo.start_travel': 'Start Travel',
     'wo.navigate': 'Navigate to site',

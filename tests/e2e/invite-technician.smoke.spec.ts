@@ -56,7 +56,7 @@ test('admin can invite, resend and revoke a technician invite', async ({ page })
   await page.goto('/admin/resources');
 
   await page.getByRole('button', { name: /Tekniker|Technicians/i }).click();
-  await expect(page.getByText(/Hantera teamet via inbjudningar/i)).toBeVisible();
+  await expect(page.getByText(/Hantera teamet via inbjudningar|Manage the team via invitations/i)).toBeVisible();
 
   await page.getByRole('button', { name: /Lägg till tekniker|Add technician|Ny Tekniker/i }).click();
   await page.getByPlaceholder(/Fullständigt namn|Full name/i).fill(inviteName);
@@ -92,7 +92,7 @@ test('admin can invite, resend and revoke a technician invite', async ({ page })
     return;
   }
 
-  await expect(page.getByText('Pending invites')).toBeVisible({ timeout: 20_000 }).catch(() => {});
+  await expect(page.getByText(/Pending invit|Väntande inbjudningar/i)).toBeVisible({ timeout: 20_000 }).catch(() => {});
   const inviteRow = page.locator('tr', { hasText: inviteEmail });
   const pendingRowVisible = await inviteRow.isVisible({ timeout: 20_000 }).catch(() => false);
 
@@ -108,10 +108,11 @@ test('admin can invite, resend and revoke a technician invite', async ({ page })
     }
   }
 
-  await inviteRow.getByRole('button', { name: /Resend/i }).click();
-  await expect(page.getByText(new RegExp(`Inbjudan skickades om till ${inviteEmail}`))).toBeVisible({ timeout: 20_000 });
+  await inviteRow.getByRole('button', { name: /Resend|Skicka om/i }).click();
+  await expect(page.getByText(new RegExp(`(Inbjudan skickades om till|Invitation resent to) ${inviteEmail}`))).toBeVisible({ timeout: 20_000 });
 
-  await inviteRow.getByRole('button', { name: /Revoke/i }).click();
-  await expect(page.getByText('Inbjudan har återkallats.')).toBeVisible({ timeout: 20_000 });
+  page.once('dialog', (dialog) => dialog.accept());
+  await inviteRow.getByRole('button', { name: /Revoke|Återkalla/i }).click();
+  await expect(page.getByText(/Inbjudan har återkallats|Invitation has been revoked/i)).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('tr', { hasText: inviteEmail })).toHaveCount(0, { timeout: 20_000 });
 });
