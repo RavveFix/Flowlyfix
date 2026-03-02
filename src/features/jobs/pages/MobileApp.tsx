@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { WorkOrderCard } from '@/features/jobs/components/WorkOrderCard';
-import { JobStatus, JobType, JobPriority, WorkOrder } from '@/shared/types';
+import { JobStatus, JobType, JobPriority, UserRole, WorkOrder } from '@/shared/types';
 import { Search, MapPin, Clock, ChevronRight, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Briefcase } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
@@ -19,10 +19,11 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
   const [isAvailableExpanded, setIsAvailableExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [claimingJobId, setClaimingJobId] = useState<string | null>(null);
   const { t, language } = useLanguage();
   const { jobs, updateJob, completeForBilling } = useJobs();
   const { getCustomerById, getAssetById } = useResources();
-  const { profile } = useAuth();
+  const { profile, activeRole } = useAuth();
   const notificationButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const locale = language === 'sv' ? 'sv-SE' : 'en-US';
@@ -35,7 +36,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
   const myJobs = useMemo(
     () =>
       fieldJobs
-        .filter((job) => job.assigned_to_user_id === profile?.id && job.status !== JobStatus.DONE)
+        .filter((job) => job.assigned_to_user_id === profile?.id && job.status !== JobStatus.DONE && job.status !== JobStatus.CANCELED)
         .sort((a, b) => {
           if (a.scheduled_start && b.scheduled_start) return a.scheduled_start.localeCompare(b.scheduled_start);
           if (a.scheduled_start) return -1;
@@ -83,11 +84,18 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
 
   const handleClaimJob = async (event: React.MouseEvent, jobId: string) => {
     event.stopPropagation();
-    if (!profile?.id) return;
-    await updateJob(jobId, {
-      status: JobStatus.ASSIGNED,
-      assigned_to_user_id: profile.id,
-    });
+    if (!profile?.id || activeRole !== UserRole.TECHNICIAN || claimingJobId) return;
+    setClaimingJobId(jobId);
+    try {
+      await updateJob(jobId, {
+        status: JobStatus.ASSIGNED,
+        assigned_to_user_id: profile.id,
+      });
+    } catch {
+      // JobContext handles error display via its own state
+    } finally {
+      setClaimingJobId(null);
+    }
   };
 
   const formatScheduledTime = (job: WorkOrder): string => {
@@ -174,9 +182,10 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
             {options?.showClaimButton ? (
               <button
                 onClick={(event) => handleClaimJob(event, job.id)}
-                className="bg-docuraft-navy text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-sm"
+                disabled={claimingJobId === job.id}
+                className="bg-docuraft-navy text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {t('mobile.claim_job')}
+                {claimingJobId === job.id ? '...' : t('mobile.claim_job')}
               </button>
             ) : (
               <>
@@ -314,6 +323,9 @@ export const MobileApp: React.FC<MobileAppProps> = ({ isSimulator }) => {
 
                 {isAvailableExpanded && (
                   <div className="space-y-4">
+                    {availableJobs.length === 0 && (
+                      <p className="text-slate-400 text-sm text-center py-6">{t('mobile.no_available_jobs')}</p>
+                    )}
                     {availableJobs.map((job) => renderJobCard(job, { showClaimButton: true }))}
                   </div>
                 )}
