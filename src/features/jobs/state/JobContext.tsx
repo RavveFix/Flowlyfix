@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import {
   AppNotification,
   BillingStatus,
@@ -130,15 +130,20 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
   const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
   const [pendingMutations, setPendingMutations] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const isOfflineRef = useRef(isOffline);
 
-  const pushNotification = (entry: Omit<AppNotification, 'id' | 'created_at' | 'read'>) => {
+  useEffect(() => {
+    isOfflineRef.current = isOffline;
+  }, [isOffline]);
+
+  const pushNotification = useCallback((entry: Omit<AppNotification, 'id' | 'created_at' | 'read'>) => {
     setNotifications((prev) => prependNotification(prev, entry));
-  };
+  }, []);
 
-  const refreshPendingMutations = async () => {
+  const refreshPendingMutations = useCallback(async () => {
     const count = await countMutations();
     setPendingMutations(count);
-  };
+  }, []);
 
   const hydrateJobs = async (baseJobs: WorkOrder[]) => {
     if (!supabase || !organizationId || baseJobs.length === 0) {
@@ -256,7 +261,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
   };
 
   const syncPendingMutations = async () => {
-    if (!supabase || !organizationId || isOffline) return;
+    if (!supabase || !organizationId || isOfflineRef.current) return;
 
     const queued = (await listMutations()).sort((a, b) => a.created_at.localeCompare(b.created_at));
     if (queued.length === 0) {
@@ -857,13 +862,13 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
 
   const getJobById = (jobId: string) => jobs.find((job) => job.id === jobId);
 
-  const dismissNotification = (id: string) => {
+  const dismissNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((notification) => notification.id !== id));
-  };
+  }, []);
 
-  const clearNotifications = () => {
+  const clearNotifications = useCallback(() => {
     setNotifications([]);
-  };
+  }, []);
 
   const value = useMemo<JobContextType>(
     () => ({
@@ -885,7 +890,12 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
       dismissNotification,
       clearNotifications,
     }),
-    [jobs, loading, isOffline, pendingMutations, notifications, organizationId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- complex functions (addJob, updateJob, etc.) close over
+    // current state and are intentionally excluded; they change identity every render but always
+    // read the latest state. The stable leaf callbacks (pushNotification, dismissNotification,
+    // clearNotifications) are wrapped in useCallback and included below.
+    [jobs, loading, isOffline, pendingMutations, notifications, organizationId,
+     pushNotification, dismissNotification, clearNotifications],
   );
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;

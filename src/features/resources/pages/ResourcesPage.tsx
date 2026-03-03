@@ -5,6 +5,7 @@ import { Search, Plus, Trash2, Box, Users, Upload } from 'lucide-react';
 import { Asset, CsvImportResult, UserRole } from '@/shared/types';
 import { CSV_IMPORT_HEADERS, parseCsvImport } from '@/features/resources/lib/csv';
 import { useJobs } from '@/features/jobs/state/JobContext';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 export const ResourcesPage: React.FC = () => {
   const { t } = useLanguage();
@@ -18,6 +19,7 @@ export const ResourcesPage: React.FC = () => {
     inviteTechnician,
     changeUserRole,
     pendingInvites,
+    auditLogs,
     revokeInvite,
     resendInvite,
     importCustomersAssets,
@@ -44,6 +46,8 @@ export const ResourcesPage: React.FC = () => {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [isInviting, setIsInviting] = useState(false);
   const [inviteInfo, setInviteInfo] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'role' | 'revoke'; id: string; label: string; isAdmin?: boolean } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const hasCsvData = csvText.trim().length > 0;
 
@@ -136,13 +140,9 @@ export const ResourcesPage: React.FC = () => {
     }
   };
 
-  const handleToggleRole = async (id: string, isAdmin: boolean) => {
-    if (!window.confirm(t('resources.confirm_role_change'))) return;
-    try {
-      await changeUserRole(id, isAdmin ? UserRole.TECHNICIAN : UserRole.ADMIN);
-    } catch (error) {
-      pushNotification({ type: 'error', message: error instanceof Error ? error.message : t('resources.user_action_failed') });
-    }
+  const handleToggleRole = (id: string, isAdmin: boolean) => {
+    const member = teamMembers.find((m) => m.id === id);
+    setConfirmAction({ type: 'role', id, label: member?.full_name ?? id, isAdmin });
   };
 
   const handleResendInvite = async (invite: { id: string; email: string; role: UserRole }) => {
@@ -158,13 +158,26 @@ export const ResourcesPage: React.FC = () => {
     }
   };
 
-  const handleRevokeInvite = async (inviteId: string) => {
-    if (!window.confirm(t('resources.confirm_revoke'))) return;
+  const handleRevokeInvite = (inviteId: string) => {
+    const invite = pendingInvites.find((i) => i.id === inviteId);
+    setConfirmAction({ type: 'revoke', id: inviteId, label: invite?.email ?? inviteId });
+  };
+
+  const executeConfirmAction = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
     try {
-      await revokeInvite(inviteId);
-      setInviteInfo(t('resources.invite_revoked'));
+      if (confirmAction.type === 'role') {
+        await changeUserRole(confirmAction.id, confirmAction.isAdmin ? UserRole.TECHNICIAN : UserRole.ADMIN);
+      } else {
+        await revokeInvite(confirmAction.id);
+        setInviteInfo(t('resources.invite_revoked'));
+      }
+      setConfirmAction(null);
     } catch (error) {
       pushNotification({ type: 'error', message: error instanceof Error ? error.message : t('resources.user_action_failed') });
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -453,6 +466,36 @@ export const ResourcesPage: React.FC = () => {
             </table>
           </div>
         )}
+
+        {auditLogs.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-slate-800">{t('resources.audit_log')}</h3>
+            <div className="mt-2 space-y-2">
+              {auditLogs.map((log) => {
+                const actor = teamMembers.find((m) => m.id === log.changed_by_user_id);
+                const target = teamMembers.find((m) => m.id === log.target_user_id);
+                const actorName = actor?.full_name ?? 'System';
+                const targetName = target?.full_name ?? log.target_user_id.slice(0, 8);
+                const fromLabel = log.from_role ?? '—';
+                const toLabel = log.to_role;
+                const date = new Date(log.created_at);
+                const timeStr = date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={log.id} className="flex items-start gap-2 text-xs text-slate-600">
+                    <span className="text-slate-400 whitespace-nowrap">{timeStr}</span>
+                    <span>
+                      {t('resources.audit_role_changed')
+                        .replace('{actor}', actorName)
+                        .replace('{target}', targetName)
+                        .replace('{from}', fromLabel)
+                        .replace('{to}', toLabel)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {isAssetModalOpen && (
@@ -724,6 +767,22 @@ export const ResourcesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        title={confirmAction?.type === 'role' ? t('resources.confirm_role_change') : t('resources.confirm_revoke')}
+        description={
+          confirmAction?.type === 'role'
+            ? t('resources.confirm_role_change_desc').replace('{name}', confirmAction?.label ?? '')
+            : t('resources.confirm_revoke_desc').replace('{email}', confirmAction?.label ?? '')
+        }
+        confirmLabel={confirmAction?.type === 'role' ? t('resources.change_role') : t('resources.revoke')}
+        cancelLabel={t('common.cancel')}
+        variant={confirmAction?.type === 'revoke' ? 'danger' : 'default'}
+        onConfirm={executeConfirmAction}
+        loading={confirmLoading}
+      />
     </div>
   );
 };

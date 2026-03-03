@@ -5,6 +5,7 @@ import {
   CsvImportRow,
   Customer,
   InventoryItem,
+  MembershipRoleAuditLog,
   OrganizationInvite,
   Profile,
   TechnicianProfile,
@@ -85,6 +86,7 @@ interface ResourceContextType {
   teamMembers: Profile[];
   inventoryItems: InventoryItem[];
   pendingInvites: OrganizationInvite[];
+  auditLogs: MembershipRoleAuditLog[];
   loading: boolean;
   addCustomer: (customer: Partial<Customer>) => Promise<Customer | null>;
   updateCustomer: (id: string, updates: Partial<Customer>) => Promise<void>;
@@ -222,6 +224,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [pendingInvites, setPendingInvites] = useState<OrganizationInvite[]>([]);
+  const [auditLogs, setAuditLogs] = useState<MembershipRoleAuditLog[]>([]);
   const pendingInvitesUnauthorizedRef = React.useRef(false);
   const hasSession = Boolean(session?.access_token);
   const isAuthenticated = authState === 'authenticated' && hasSession;
@@ -249,6 +252,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       refreshUsersFromList(DEMO_TEAM_MEMBERS);
       setInventoryItems([]);
       setPendingInvites([]);
+      setAuditLogs([]);
       setLoading(false);
       return;
     }
@@ -259,6 +263,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       refreshUsersFromList([]);
       setInventoryItems([]);
       setPendingInvites([]);
+      setAuditLogs([]);
       setLoading(false);
       return;
     }
@@ -269,6 +274,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       refreshUsersFromList([]);
       setInventoryItems([]);
       setPendingInvites([]);
+      setAuditLogs([]);
       setLoading(false);
       return;
     }
@@ -304,6 +310,24 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
     } else {
       setPendingInvites([]);
     }
+
+    if (canReadInvites && supabase) {
+      const { data: auditData, error: auditError } = await supabase
+        .from('membership_role_audit_logs')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (auditError) {
+        console.error('audit logs load failed:', auditError.message);
+        setAuditLogs([]);
+      } else {
+        setAuditLogs((auditData as MembershipRoleAuditLog[]) ?? []);
+      }
+    } else {
+      setAuditLogs([]);
+    }
+
     setLoading(false);
   };
 
@@ -677,6 +701,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       teamMembers,
       inventoryItems,
       pendingInvites,
+      auditLogs,
       loading,
       addCustomer,
       updateCustomer,
@@ -697,7 +722,7 @@ export const ResourceProvider = ({ children }: { children?: ReactNode }) => {
       getTechnicianById,
       reload: loadResources,
     }),
-    [customers, assets, technicians, teamMembers, inventoryItems, pendingInvites, loading, organizationId],
+    [customers, assets, technicians, teamMembers, inventoryItems, pendingInvites, auditLogs, loading, organizationId],
   );
 
   return <ResourceContext.Provider value={value}>{children}</ResourceContext.Provider>;

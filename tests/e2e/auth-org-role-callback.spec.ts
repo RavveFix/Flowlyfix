@@ -19,11 +19,11 @@ interface FixtureOrgResult {
 }
 
 function orgSwitcherLocator(page: Page) {
-  return page.locator('label:has-text("Aktivt företag")').locator('xpath=following-sibling::select[1]').first();
+  return page.locator('label:has-text(/Aktivt företag|Active company/i)').locator('xpath=following-sibling::select[1]').first();
 }
 
 async function readRoleBadge(page: Page) {
-  const roleBadge = page.locator('span', { hasText: /^Roll:/i }).first();
+  const roleBadge = page.locator('span', { hasText: /^(Roll|Role):/i }).first();
   const visible = await roleBadge.isVisible({ timeout: 3_000 }).catch(() => false);
   if (!visible) return null;
   return (await roleBadge.innerText()).trim();
@@ -215,6 +215,10 @@ function failOrSkip(shouldSkip: boolean, reason: string) {
 
   test.skip(true, reason);
 }
+
+// This test logs in as a different user (E2E_CALLBACK_ADMIN_EMAIL), so it must
+// opt out of the global storageState that pre-loads the primary admin session.
+test.use({ storageState: undefined });
 
 test('org switch + role transition remains enforced after auth callback in same session', async ({ page }) => {
   const callbackAdminEmail = (process.env.E2E_CALLBACK_ADMIN_EMAIL ?? '').trim();

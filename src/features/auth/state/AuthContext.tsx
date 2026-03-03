@@ -506,7 +506,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     [debugLog, fetchIdentityWithRetry, markAuthEvent, recoverSessionWithRetry],
   );
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(DEMO_PROFILE);
@@ -541,9 +541,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       allowNullSessionRecovery: true,
       eventName: 'MANUAL_REFRESH',
     });
-  };
+  }, [applySession]);
 
-  const retryProfileLoad = async () => {
+  const retryProfileLoad = useCallback(async () => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       return;
     }
@@ -555,7 +555,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       allowNullSessionRecovery: true,
       eventName: 'RETRY_PROFILE_LOAD',
     });
-  };
+  }, [applySession]);
 
   useEffect(() => {
     authStateRef.current = authState;
@@ -759,7 +759,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     };
   }, [debugLog, refreshProfile, runtimeAuthMode, session?.user?.id]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     if (runtimeAuthMode === 'demo') {
       const demoProfile = {
         ...DEMO_PROFILE,
@@ -788,9 +788,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     }
 
     return {};
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(null);
@@ -820,14 +820,14 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     }
 
     await supabase.auth.signOut();
-  };
+  }, []);
 
-  const switchActiveOrganization = async (organizationId: string) => {
+  const switchActiveOrganization = useCallback(async (organizationId: string) => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       return { error: 'Organization switch is only available in Supabase mode.' };
     }
 
-    if (orgSwitchLockRef.current || orgSwitchInFlight) {
+    if (orgSwitchLockRef.current) {
       return { error: 'Organization switch already in progress.' };
     }
 
@@ -849,7 +849,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       orgSwitchLockRef.current = false;
       setOrgSwitchInFlight(false);
     }
-  };
+  }, [refreshProfile]);
 
   const value = useMemo<AuthContextType>(
     () => ({

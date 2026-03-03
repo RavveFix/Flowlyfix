@@ -65,3 +65,16 @@ export interface Profile {
 export interface TechnicianProfile extends Profile {
   role: UserRole.TECHNICIAN;
 }
+
+export interface MembershipRoleAuditLog {
+  id: string;
+  organization_id: string;
+  target_user_id: string;
+  changed_by_user_id: string | null;
+  from_role: UserRole | null;
+  to_role: UserRole;
+  from_status: UserStatus | null;
+  to_status: UserStatus;
+  reason: string | null;
+  created_at: string;
+}
