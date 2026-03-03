@@ -426,6 +426,33 @@ export const en = {
     'auth.config_error_title': 'Auth configuration missing',
     'auth.config_error_message': 'This environment is missing a valid Flowlyfix auth setup.',
     'auth.config_error_hint': 'Set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY for real auth, or VITE_DEMO_MODE=true for explicit demo mode.',
+
+    // Signup page
+    'auth.signup_title': 'Create Company',
+    'auth.signup_subtitle': 'Register admin account and company.',
+    'auth.signup_disabled_title': 'Self-signup disabled',
+    'auth.signup_disabled_hint': 'Ask your administrator for an invitation.',
+    'auth.signup_go_to_login': 'Go to login',
+    'auth.signup_field_company_name': 'Company Name',
+    'auth.signup_field_admin_name': 'Admin Name',
+    'auth.signup_field_email': 'Email',
+    'auth.signup_field_password': 'Password',
+    'auth.signup_creating': 'Creating...',
+    'auth.signup_create_account': 'Create Account',
+    'auth.signup_already_have_account': 'Already have an account? Sign in',
+    'auth.signup_verify_email_hint': 'Account created. Verify your email and sign in, then create your company from the signup flow again.',
+
+    // Auth callback page
+    'auth.callback_completing': 'Completing sign in...',
+    'auth.callback_supabase_not_configured': 'Supabase is not configured.',
+    'auth.callback_no_session': 'No valid session data found in the link.',
+    'auth.callback_failed': 'Could not complete sign in via the link.',
+
+    // Profile load error hints
+    'auth.hint_session_invalid': 'The session is no longer valid. Sign out and sign in again.',
+    'auth.hint_membership_not_active': 'Your account has no active membership in the selected organization. Ask an admin to check your invitation and role.',
+    'auth.hint_org_role_mismatch': 'The role could not be synced correctly. Try again and contact an admin if the error persists.',
+
     'notif.button_title': 'Notifications',
     'notif.title': 'Notifications',
     'notif.clear_all': 'Clear all',
@@ -455,6 +482,10 @@ export const en = {
     'notif.billing_ready_message': 'A work order is ready to invoice.',
     'notif.billing_validation_failed_title': 'Cannot complete',
     'notif.billing_validation_failed_message': 'Report, time, and materials are required before sign-off.',
+    'notif.billing_validation_missing_prefix': 'Missing:',
+    'notif.billing_validation_missing_report': 'report',
+    'notif.billing_validation_missing_time_log': 'time log',
+    'notif.billing_validation_missing_parts': 'parts',
     'notif.billing_locked_title': 'Billing locked',
     'notif.billing_locked_message': 'Only READY work orders can be edited for billing.',
     'notif.billing_transition_invalid_title': 'Invalid billing status',

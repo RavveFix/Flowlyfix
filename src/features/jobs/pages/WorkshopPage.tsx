@@ -42,9 +42,12 @@ export const WorkshopPage: React.FC = () => {
   const addTimeEntry = async () => {
     if (!selectedJob || !newTime.minutes) return;
 
+    const parsedMinutes = Number.parseInt(newTime.minutes, 10);
+    if (isNaN(parsedMinutes) || parsedMinutes <= 0) return;
+
     const entry = {
       description: newTime.desc || t('workshop.default_labor'),
-      minutes: Number.parseInt(newTime.minutes, 10),
+      minutes: parsedMinutes,
     };
 
     await addWorkLog(selectedJob.id, entry);
@@ -62,10 +65,15 @@ export const WorkshopPage: React.FC = () => {
   const addPartEntry = async () => {
     if (!selectedJob || !newPart.name) return;
 
+    const parsedQty = Number.parseInt(newPart.qty, 10);
+    const parsedCost = Number.parseFloat(newPart.cost || '0');
+    if (isNaN(parsedQty) || parsedQty <= 0) return;
+    if (isNaN(parsedCost) || parsedCost < 0) return;
+
     const entry = {
       part_name: newPart.name,
-      qty: Number.parseInt(newPart.qty, 10),
-      cost: Number.parseFloat(newPart.cost || '0'),
+      qty: parsedQty,
+      cost: parsedCost,
     };
 
     await addWorkPart(selectedJob.id, entry);

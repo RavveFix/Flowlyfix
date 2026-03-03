@@ -426,6 +426,33 @@ export const sv = {
     'auth.config_error_title': 'Auth-konfiguration saknas',
     'auth.config_error_message': 'Miljön saknar giltig auth-konfiguration för Flowlyfix.',
     'auth.config_error_hint': 'Sätt VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY för riktig auth, eller VITE_DEMO_MODE=true för explicit demoläge.',
+
+    // Signup page
+    'auth.signup_title': 'Skapa företag',
+    'auth.signup_subtitle': 'Registrera admin-konto och företag.',
+    'auth.signup_disabled_title': 'Self-signup inaktiverat',
+    'auth.signup_disabled_hint': 'Be din administratör om en inbjudan.',
+    'auth.signup_go_to_login': 'Till login',
+    'auth.signup_field_company_name': 'Företagsnamn',
+    'auth.signup_field_admin_name': 'Adminnamn',
+    'auth.signup_field_email': 'E-post',
+    'auth.signup_field_password': 'Lösenord',
+    'auth.signup_creating': 'Skapar...',
+    'auth.signup_create_account': 'Skapa konto',
+    'auth.signup_already_have_account': 'Har redan konto? Logga in',
+    'auth.signup_verify_email_hint': 'Kontot skapades. Verifiera e-post och logga in, skapa sedan företag från signup-flödet igen.',
+
+    // Auth callback page
+    'auth.callback_completing': 'Slutför inloggning...',
+    'auth.callback_supabase_not_configured': 'Supabase är inte konfigurerat.',
+    'auth.callback_no_session': 'Ingen giltig sessionsdata hittades i länken.',
+    'auth.callback_failed': 'Kunde inte slutföra inloggning via länken.',
+
+    // Profile load error hints
+    'auth.hint_session_invalid': 'Sessionen är inte längre giltig. Logga ut och logga in igen.',
+    'auth.hint_membership_not_active': 'Ditt konto saknar aktivt medlemskap i vald organisation. Be en admin kontrollera inbjudan och roll.',
+    'auth.hint_org_role_mismatch': 'Rollen kunde inte synkas korrekt. Försök igen och kontakta admin om felet kvarstår.',
+
     'notif.button_title': 'Notiser',
     'notif.title': 'Notiser',
     'notif.clear_all': 'Rensa alla',
@@ -455,6 +482,10 @@ export const sv = {
     'notif.billing_ready_message': 'En arbetsorder är klar att fakturera.',
     'notif.billing_validation_failed_title': 'Kan inte slutföra',
     'notif.billing_validation_failed_message': 'Rapport, tid och material krävs innan signering.',
+    'notif.billing_validation_missing_prefix': 'Saknas:',
+    'notif.billing_validation_missing_report': 'rapport',
+    'notif.billing_validation_missing_time_log': 'tidlogg',
+    'notif.billing_validation_missing_parts': 'material',
     'notif.billing_locked_title': 'Fakturering låst',
     'notif.billing_locked_message': 'Endast klarmarkerade arbetsordrar kan redigeras inför fakturering.',
     'notif.billing_transition_invalid_title': 'Ogiltig fakturastatus',

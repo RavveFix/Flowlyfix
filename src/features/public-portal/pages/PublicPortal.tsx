@@ -12,6 +12,7 @@ export const PublicPortal: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     companyName: '',
@@ -21,11 +22,12 @@ export const PublicPortal: React.FC = () => {
     description: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setSubmitError(null);
 
-    const doSubmit = async () => {
+    try {
       const created = await addJob({
         customer_id: customers[0]?.id ?? '',
         status: JobStatus.WEB_PENDING,
@@ -39,12 +41,17 @@ export const PublicPortal: React.FC = () => {
         contact_phone: formData.phone,
       });
 
-      setSubmittedId(created?.id ?? `WEB-${Math.floor(Math.random() * 10000)}`);
-      setSubmitted(true);
-      setLoading(false);
-    };
+      if (!created?.id) {
+        throw new Error('Submission did not return a valid job ID.');
+      }
 
-    setTimeout(doSubmit, 700);
+      setSubmittedId(created.id);
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : t('portal.submit_error'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -146,8 +153,14 @@ export const PublicPortal: React.FC = () => {
                 />
             </div>
 
-            <button 
-                type="submit" 
+            {submitError && (
+                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                    {submitError}
+                </div>
+            )}
+
+            <button
+                type="submit"
                 disabled={loading}
                 className="w-full py-3.5 bg-docuraft-navy text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2"
             >

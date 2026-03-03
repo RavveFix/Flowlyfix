@@ -144,7 +144,11 @@ export const WorkOrderCard: React.FC<WorkOrderCardProps> = ({ job, customer, ass
       const hasPartLog = (job.parts_used?.length ?? 0) > 0;
 
       if (!hasReport || !hasTimeLog || !hasPartLog) {
-        setFooterError(t('notif.billing_validation_failed_message'));
+        const missing: string[] = [];
+        if (!hasReport) missing.push(t('notif.billing_validation_missing_report'));
+        if (!hasTimeLog) missing.push(t('notif.billing_validation_missing_time_log'));
+        if (!hasPartLog) missing.push(t('notif.billing_validation_missing_parts'));
+        setFooterError(`${t('notif.billing_validation_missing_prefix')} ${missing.join(', ')}`);
         return;
       }
     }

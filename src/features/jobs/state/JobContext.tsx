@@ -131,10 +131,17 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
   const [pendingMutations, setPendingMutations] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const isOfflineRef = useRef(isOffline);
+  const tRef = useRef(t);
+  const syncPendingMutationsRef = useRef<() => Promise<void>>();
+  const fetchJobsRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
     isOfflineRef.current = isOffline;
   }, [isOffline]);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const pushNotification = useCallback((entry: Omit<AppNotification, 'id' | 'created_at' | 'read'>) => {
     setNotifications((prev) => prependNotification(prev, entry));
@@ -319,10 +326,14 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
     });
   }, [organizationId, authLoading, authState, isAuthenticated, activeRole, user?.id]);
 
+  // Keep refs in sync so event handlers and realtime callbacks always read latest values.
+  useEffect(() => { fetchJobsRef.current = fetchJobs; });
+  useEffect(() => { syncPendingMutationsRef.current = syncPendingMutations; });
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOffline(false);
-      syncPendingMutations().catch((error) => {
+      syncPendingMutationsRef.current?.().catch((error) => {
         console.error('syncPendingMutations failed after reconnect:', error);
       });
     };
@@ -331,8 +342,8 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
       setIsOffline(true);
       pushNotification({
         type: 'warning',
-        title: t('notif.offline_mode_title'),
-        message: t('notif.offline_mode_message'),
+        title: tRef.current('notif.offline_mode_title'),
+        message: tRef.current('notif.offline_mode_message'),
       });
     };
 
@@ -343,7 +354,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [organizationId]);
+  }, [pushNotification]);
 
   useEffect(() => {
     if (!supabase || !organizationId) {
@@ -356,13 +367,13 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'work_orders', filter: `organization_id=eq.${organizationId}` },
         (payload) => {
-          fetchJobs().catch((error) => console.error('realtime fetch jobs failed:', error));
+          fetchJobsRef.current?.().catch((error) => console.error('realtime fetch jobs failed:', error));
 
           if (payload.eventType === 'UPDATE') {
             pushNotification({
               type: 'info',
-              title: t('notif.work_order_updated_title'),
-              message: t('notif.work_order_updated_message'),
+              title: tRef.current('notif.work_order_updated_title'),
+              message: tRef.current('notif.work_order_updated_message'),
             });
           }
         },
@@ -377,24 +388,24 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
           if (eventType === 'WORK_ORDER_ASSIGNED') {
             pushNotification({
               type: 'success',
-              title: t('notif.new_assignment_title'),
-              message: t('notif.new_assignment_message'),
+              title: tRef.current('notif.new_assignment_title'),
+              message: tRef.current('notif.new_assignment_message'),
             });
           }
 
           if (eventType === 'WORK_ORDER_STATUS_CHANGED') {
             pushNotification({
               type: 'info',
-              title: t('notif.status_changed_title'),
-              message: t('notif.status_changed_message'),
+              title: tRef.current('notif.status_changed_title'),
+              message: tRef.current('notif.status_changed_message'),
             });
           }
 
           if (eventType === 'WORK_ORDER_BILLING_READY') {
             pushNotification({
               type: 'success',
-              title: t('notif.billing_ready_title'),
-              message: t('notif.billing_ready_message'),
+              title: tRef.current('notif.billing_ready_title'),
+              message: tRef.current('notif.billing_ready_message'),
             });
           }
         },
@@ -404,7 +415,7 @@ export const JobProvider = ({ children }: { children?: ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [organizationId, activeRole]);
+  }, [organizationId, activeRole, pushNotification]);
 
   const addJob = async (job: Partial<WorkOrder>) => {
     const newWorkOrder: WorkOrder = {

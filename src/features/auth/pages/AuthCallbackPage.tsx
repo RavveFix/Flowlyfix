@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
 import { supabase } from '@/shared/lib/supabase/client';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 const OTP_TYPES: EmailOtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'];
 
@@ -18,6 +19,7 @@ function isEmailOtpType(value: string | null): value is EmailOtpType {
 
 export const AuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -26,7 +28,7 @@ export const AuthCallbackPage: React.FC = () => {
     const completeAuth = async () => {
       if (!supabase) {
         if (mounted) {
-          setError('Supabase är inte konfigurerat.');
+          setError(t('auth.callback_supabase_not_configured'));
         }
         return;
       }
@@ -73,7 +75,7 @@ export const AuthCallbackPage: React.FC = () => {
         }
 
         if (!data.session) {
-          throw new Error('Ingen giltig sessionsdata hittades i länken.');
+          throw new Error(t('auth.callback_no_session'));
         }
 
         if (!mounted) {
@@ -85,7 +87,7 @@ export const AuthCallbackPage: React.FC = () => {
         if (!mounted) {
           return;
         }
-        setError(callbackError instanceof Error ? callbackError.message : 'Kunde inte slutföra inloggning via länken.');
+        setError(callbackError instanceof Error ? callbackError.message : t('auth.callback_failed'));
       }
     };
 
@@ -106,7 +108,7 @@ export const AuthCallbackPage: React.FC = () => {
         ) : (
           <div className="text-sm text-slate-600 flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Slutför inloggning...
+            {t('auth.callback_completing')}
           </div>
         )}
       </div>
