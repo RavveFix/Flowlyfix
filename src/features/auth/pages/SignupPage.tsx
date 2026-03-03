@@ -21,7 +21,7 @@ export const SignupPage: React.FC = () => {
     event.preventDefault();
 
     if (!supabase) {
-      setError('Supabase is not configured.');
+      setError(t('auth.callback_supabase_not_configured'));
       return;
     }
 

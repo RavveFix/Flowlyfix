@@ -22,6 +22,7 @@ export const WorkshopPage: React.FC = () => {
   const [newTime, setNewTime] = useState({ desc: '', minutes: '' });
   const [newPart, setNewPart] = useState({ name: '', qty: '1', cost: '' });
   const [workshopReport, setWorkshopReport] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const workshopJobs = jobs.filter((job) => job.job_type === JobType.WORKSHOP);
 
@@ -43,7 +44,11 @@ export const WorkshopPage: React.FC = () => {
     if (!selectedJob || !newTime.minutes) return;
 
     const parsedMinutes = Number.parseInt(newTime.minutes, 10);
-    if (isNaN(parsedMinutes) || parsedMinutes <= 0) return;
+    if (isNaN(parsedMinutes) || parsedMinutes <= 0) {
+      setInputError(t('workshop.invalid_minutes'));
+      return;
+    }
+    setInputError(null);
 
     const entry = {
       description: newTime.desc || t('workshop.default_labor'),
@@ -67,8 +72,15 @@ export const WorkshopPage: React.FC = () => {
 
     const parsedQty = Number.parseInt(newPart.qty, 10);
     const parsedCost = Number.parseFloat(newPart.cost || '0');
-    if (isNaN(parsedQty) || parsedQty <= 0) return;
-    if (isNaN(parsedCost) || parsedCost < 0) return;
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      setInputError(t('workshop.invalid_quantity'));
+      return;
+    }
+    if (isNaN(parsedCost) || parsedCost < 0) {
+      setInputError(t('workshop.invalid_cost'));
+      return;
+    }
+    setInputError(null);
 
     const entry = {
       part_name: newPart.name,
@@ -279,6 +291,9 @@ export const WorkshopPage: React.FC = () => {
                         {t('workshop.add_time')}
                       </button>
                     </div>
+                    {inputError && activeTab === 'time' && (
+                      <p className="text-red-500 text-xs mt-1">{inputError}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -332,6 +347,9 @@ export const WorkshopPage: React.FC = () => {
                     <button onClick={addPartEntry} className="w-full py-2 bg-docuraft-navy text-white rounded-lg text-sm font-semibold hover:bg-slate-800">
                       {t('workshop.add_part')}
                     </button>
+                    {inputError && activeTab === 'parts' && (
+                      <p className="text-red-500 text-xs mt-1">{inputError}</p>
+                    )}
                   </div>
                 </div>
               </div>
