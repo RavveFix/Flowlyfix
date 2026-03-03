@@ -6,9 +6,11 @@ import { JobStatus, JobPriority, WorkOrder, JobType } from '@/shared/types';
 import { CheckInModal } from '@/features/jobs/components/CheckInModal';
 import { useResources } from '@/features/resources/state/ResourceContext';
 import { useAuth } from '@/features/auth/state/AuthContext';
+import { formatDateKeyForDisplay } from '@/shared/lib/planningDate';
 
 export const WorkshopPage: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const locale = language === 'sv' ? 'sv-SE' : 'en-US';
   const { jobs, updateJob, addWorkLog, addWorkPart, completeForBilling } = useJobs();
   const { getCustomerById } = useResources();
   const { profile } = useAuth();
@@ -20,6 +22,7 @@ export const WorkshopPage: React.FC = () => {
   const [newTime, setNewTime] = useState({ desc: '', minutes: '' });
   const [newPart, setNewPart] = useState({ name: '', qty: '1', cost: '' });
   const [workshopReport, setWorkshopReport] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const workshopJobs = jobs.filter((job) => job.job_type === JobType.WORKSHOP);
 
@@ -40,9 +43,16 @@ export const WorkshopPage: React.FC = () => {
   const addTimeEntry = async () => {
     if (!selectedJob || !newTime.minutes) return;
 
+    const parsedMinutes = Number.parseInt(newTime.minutes, 10);
+    if (isNaN(parsedMinutes) || parsedMinutes <= 0) {
+      setInputError(t('workshop.invalid_minutes'));
+      return;
+    }
+    setInputError(null);
+
     const entry = {
       description: newTime.desc || t('workshop.default_labor'),
-      minutes: Number.parseInt(newTime.minutes, 10),
+      minutes: parsedMinutes,
     };
 
     await addWorkLog(selectedJob.id, entry);
@@ -60,10 +70,22 @@ export const WorkshopPage: React.FC = () => {
   const addPartEntry = async () => {
     if (!selectedJob || !newPart.name) return;
 
+    const parsedQty = Number.parseInt(newPart.qty, 10);
+    const parsedCost = Number.parseFloat(newPart.cost || '0');
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      setInputError(t('workshop.invalid_quantity'));
+      return;
+    }
+    if (isNaN(parsedCost) || parsedCost < 0) {
+      setInputError(t('workshop.invalid_cost'));
+      return;
+    }
+    setInputError(null);
+
     const entry = {
       part_name: newPart.name,
-      qty: Number.parseInt(newPart.qty, 10),
-      cost: Number.parseFloat(newPart.cost || '0'),
+      qty: parsedQty,
+      cost: parsedCost,
     };
 
     await addWorkPart(selectedJob.id, entry);
@@ -144,7 +166,7 @@ export const WorkshopPage: React.FC = () => {
                         <h4 className="font-bold text-slate-900 mb-1">{customer?.name || t('common.unknown')}</h4>
                         <p className="text-sm text-slate-600 line-clamp-2 mb-3 leading-relaxed">{job.description}</p>
                         <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
-                          <span>{new Date(job.created_at).toLocaleDateString()}</span>
+                          <span>{formatDateKeyForDisplay(job.created_at, locale, { month: 'short', day: 'numeric' })}</span>
                         </div>
                       </div>
                     );
@@ -269,6 +291,9 @@ export const WorkshopPage: React.FC = () => {
                         {t('workshop.add_time')}
                       </button>
                     </div>
+                    {inputError && activeTab === 'time' && (
+                      <p className="text-red-500 text-xs mt-1">{inputError}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -322,6 +347,9 @@ export const WorkshopPage: React.FC = () => {
                     <button onClick={addPartEntry} className="w-full py-2 bg-docuraft-navy text-white rounded-lg text-sm font-semibold hover:bg-slate-800">
                       {t('workshop.add_part')}
                     </button>
+                    {inputError && activeTab === 'parts' && (
+                      <p className="text-red-500 text-xs mt-1">{inputError}</p>
+                    )}
                   </div>
                 </div>
               </div>

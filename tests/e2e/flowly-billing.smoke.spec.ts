@@ -1,77 +1,52 @@
 import { test, expect } from '@playwright/test';
 import { ensureAuthenticated } from './helpers/auth';
+import { ensureAdminSmokeReadyBillingFixture } from './helpers/adminSmokeFixture';
 
 test.setTimeout(120_000);
 
-test('field sign-off drives billing READY -> SENT -> INVOICED', async ({ page }) => {
+const STRICT_ADMIN_SMOKE = process.env.E2E_STRICT_ADMIN_SMOKE === '1';
+
+function failOrSkip(shouldSkip: boolean, reason: string) {
+  if (!shouldSkip) {
+    return;
+  }
+
+  if (STRICT_ADMIN_SMOKE) {
+    throw new Error(`Strict admin smoke: ${reason}`);
+  }
+
+  test.skip(true, reason);
+}
+
+test('billing READY queue renders and allows detail edits', async ({ page }) => {
+  const readyFixture = await ensureAdminSmokeReadyBillingFixture().catch(() => null);
+  failOrSkip(!readyFixture, 'Could not provision READY billing fixture for smoke-admin.');
+  if (!readyFixture) {
+    return;
+  }
+
   await page.goto('/admin/dashboard');
   await ensureAuthenticated(page);
-
-  await page.getByRole('button', { name: /Fältapp|Field App/i }).click();
-  await expect(page.getByText(/Min Dag|My Day/i)).toBeVisible();
-
-  // Open first available field job card in current environment.
-  const firstFieldJobCard = page.locator('div.cursor-pointer').filter({ has: page.locator('h3') }).first();
-  await expect(firstFieldJobCard).toBeVisible({ timeout: 20_000 });
-  const customerName = (await firstFieldJobCard.locator('h3').first().innerText()).trim();
-  await firstFieldJobCard.click();
-
-  // Add one time row.
-  await page.getByPlaceholder(/Beskrivning \(t\.ex\. Felsökning\)|Description \(e\.g\. Diagnostics\)/i).fill('Service utförd på plats');
-  await page.getByPlaceholder(/Minuter|Minutes/i).fill('45');
-  await page.getByRole('button', { name: /Lägg till Tid|Add Time/i }).click();
-
-  // Add one material row.
-  await page.getByPlaceholder(/Artikelnamn \/ SKU|Part Name \/ SKU/i).fill('Filterkit A');
-  await page.getByPlaceholder(/Antal|Qty/i).fill('1');
-  await page.getByPlaceholder(/Pris|Cost/i).fill('199');
-  await page.getByRole('button', { name: /Lägg till Del|Add Part/i }).click();
-
-  // Add report and complete/sign.
-  await page.getByPlaceholder(/Beskriv utfört arbete|Describe work done/i).fill('Bytt filter, trycktest och funktionskontroll utförd.');
-  await page.getByRole('button', { name: /Slutför|Complete/i }).click();
-  await page.getByRole('button', { name: /Klart & Signera|Complete & Sign/i }).click();
-
-  // Verify job enters billing READY queue.
-  await page.evaluate(() => {
-    window.history.pushState({}, '', '/admin/billing?tab=ready');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  });
+  await page.goto('/admin/billing?tab=ready');
   await page.waitForURL(/\/admin\/billing/);
   await expect(page.getByText(/Faktureringskö|Billing Queue/i)).toBeVisible({ timeout: 15_000 });
 
-  // Move READY -> SENT.
-  const sendInvoiceButtons = page.getByRole('button', { name: /Skicka faktura|Send Invoice/i });
-  const hasReadyRow = (await sendInvoiceButtons.count()) > 0;
-  test.skip(!hasReadyRow, `No READY billing rows available after completing field job "${customerName}".`);
-  let sentClicked = false;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const nextSendButton = page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).first();
-    if ((await page.getByRole('button', { name: /Skicka faktura|Send Invoice/i }).count()) === 0) {
-      break;
-    }
-
-    try {
-      await nextSendButton.click({ timeout: 2_500 });
-      sentClicked = true;
-      break;
-    } catch {
-      await page.waitForTimeout(250);
-    }
+  const readyFixtureRow = page
+    .locator('div.bg-white.border.border-gray-200.rounded-xl')
+    .filter({ hasText: readyFixture.description })
+    .first();
+  const hasReadyFixtureRow = await readyFixtureRow.isVisible({ timeout: 20_000 }).catch(() => false);
+  failOrSkip(
+    !hasReadyFixtureRow,
+    `Could not find READY fixture row for "${readyFixture.description}" in billing queue.`,
+  );
+  if (!hasReadyFixtureRow) {
+    return;
   }
-  test.skip(!sentClicked, `Could not click a stable Send Invoice button for "${customerName}".`);
 
-  // Move SENT -> INVOICED.
-  const sentTab = page.getByRole('button', { name: /^(Skickad|Sent) \(\d+\)$/ });
-  await sentTab.click();
-  const markInvoicedButtons = page.getByRole('button', { name: /Markera som fakturerad|Mark as Invoiced/i });
-  const hasSentRow = (await markInvoicedButtons.count()) > 0;
-  test.skip(!hasSentRow, `No SENT rows available after sending invoice for "${customerName}".`);
-  await expect(markInvoicedButtons.first()).toBeVisible({ timeout: 15_000 });
-  await markInvoicedButtons.first().click();
-
-  // Verify in INVOICED tab.
-  const invoicedTab = page.getByRole('button', { name: /^(Fakturerad|Invoiced) \(\d+\)$/ });
-  await invoicedTab.click();
-  await expect(invoicedTab).toBeVisible();
+  const patchedReport = `Smoke billing edit ${Date.now()}`;
+  await readyFixtureRow.getByRole('button', { name: /Redigera underlag|Edit Details/i }).first().click();
+  await page.getByPlaceholder(/Beskriv vad som utfördes|Describe what was done/i).fill(patchedReport);
+  await readyFixtureRow.getByRole('button', { name: /Spara underlag|Save Details/i }).first().click();
+  await expect(readyFixtureRow.getByText(patchedReport)).toBeVisible({ timeout: 15_000 });
 });

@@ -5,6 +5,7 @@ import { runtimeConfig, type RuntimeAuthMode } from '@/shared/config/runtime';
 import { OrganizationMembership, Profile, UserRole, UserStatus } from '@/shared/types';
 
 export type AuthState = 'bootstrapping' | 'authenticated' | 'unauthenticated' | 'profile_error';
+export type AuthHealth = 'healthy' | 'recovering' | 'degraded';
 
 interface AuthEventDebug {
   event: string;
@@ -20,6 +21,9 @@ interface AuthContextType {
   activeRole: UserRole | null;
   loading: boolean;
   authState: AuthState;
+  authHealth: AuthHealth;
+  lastAuthEvent: string | null;
+  orgSwitchInFlight: boolean;
   profileError: string | null;
   isConfigured: boolean;
   runtimeAuthMode: RuntimeAuthMode;
@@ -132,6 +136,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
   const [activeRole, setActiveRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState<AuthState>('bootstrapping');
+  const [authHealth, setAuthHealth] = useState<AuthHealth>('healthy');
+  const [lastAuthEvent, setLastAuthEvent] = useState<string | null>(null);
+  const [orgSwitchInFlight, setOrgSwitchInFlight] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [authEventDebug, setAuthEventDebug] = useState<AuthEventDebug | null>(null);
 
@@ -139,6 +146,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
   const lastKnownProfileRef = useRef<Profile | null>(null);
   const initializedRef = useRef(false);
   const authStateRef = useRef<AuthState>('bootstrapping');
+  const orgSwitchLockRef = useRef(false);
 
   const debugLog = useCallback((message: string, payload?: unknown) => {
     if (!(import.meta as any).env?.DEV || !runtimeConfig.authDebugEnabled) {
@@ -154,6 +162,8 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
   }, []);
 
   const markAuthEvent = useCallback((eventName: string) => {
+    setLastAuthEvent(eventName);
+
     if (!(import.meta as any).env?.DEV) {
       return;
     }
@@ -441,6 +451,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
           setProfile(lastKnownProfileRef.current);
           setProfileError('Temporary session recovery issue');
           setAuthState('authenticated');
+          setAuthHealth('recovering');
           setLoading(false);
           return;
         }
@@ -453,6 +464,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         lastKnownProfileRef.current = null;
         setProfileError(null);
         setAuthState('unauthenticated');
+        setAuthHealth('healthy');
         setLoading(false);
         return;
       }
@@ -468,6 +480,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         lastKnownProfileRef.current = result.profile;
         setProfileError(null);
         setAuthState('authenticated');
+        setAuthHealth('healthy');
         setLoading(false);
         return;
       }
@@ -476,6 +489,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         setProfile(lastKnownProfileRef.current);
         setProfileError(result.error ?? 'Temporary profile loading issue');
         setAuthState('authenticated');
+        setAuthHealth('recovering');
         setLoading(false);
         return;
       }
@@ -486,12 +500,13 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       setActiveRole(null);
       setProfileError(result.error ?? 'Could not load profile');
       setAuthState('profile_error');
+      setAuthHealth('degraded');
       setLoading(false);
     },
     [debugLog, fetchIdentityWithRetry, markAuthEvent, recoverSessionWithRetry],
   );
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(DEMO_PROFILE);
@@ -500,6 +515,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       setActiveRole(UserRole.ADMIN);
       setProfileError(null);
       setAuthState('authenticated');
+      setAuthHealth('healthy');
       setLoading(false);
       lastKnownProfileRef.current = DEMO_PROFILE;
       return;
@@ -513,6 +529,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       setActiveRole(null);
       setProfileError('Missing auth configuration');
       setAuthState('unauthenticated');
+      setAuthHealth('degraded');
       setLoading(false);
       return;
     }
@@ -524,9 +541,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       allowNullSessionRecovery: true,
       eventName: 'MANUAL_REFRESH',
     });
-  };
+  }, [applySession]);
 
-  const retryProfileLoad = async () => {
+  const retryProfileLoad = useCallback(async () => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       return;
     }
@@ -538,7 +555,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       allowNullSessionRecovery: true,
       eventName: 'RETRY_PROFILE_LOAD',
     });
-  };
+  }, [applySession]);
 
   useEffect(() => {
     authStateRef.current = authState;
@@ -557,6 +574,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       lastKnownProfileRef.current = DEMO_PROFILE;
       setProfileError(null);
       setAuthState('authenticated');
+      setAuthHealth('healthy');
       setLoading(false);
       return;
     }
@@ -570,6 +588,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       lastKnownProfileRef.current = null;
       setProfileError('Missing auth configuration');
       setAuthState('unauthenticated');
+      setAuthHealth('degraded');
       setLoading(false);
       return;
     }
@@ -679,6 +698,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
         lastKnownProfileRef.current = null;
         setProfileError(getErrorMessage(error));
         setAuthState('profile_error');
+        setAuthHealth('degraded');
         setLoading(false);
       }
     }, 1500);
@@ -739,7 +759,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     };
   }, [debugLog, refreshProfile, runtimeAuthMode, session?.user?.id]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     if (runtimeAuthMode === 'demo') {
       const demoProfile = {
         ...DEMO_PROFILE,
@@ -753,6 +773,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       lastKnownProfileRef.current = demoProfile;
       setProfileError(null);
       setAuthState('authenticated');
+      setAuthHealth('healthy');
       setLoading(false);
       return {};
     }
@@ -767,9 +788,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
     }
 
     return {};
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (runtimeAuthMode === 'demo') {
       setSession(null);
       setProfile(null);
@@ -779,6 +800,7 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       lastKnownProfileRef.current = null;
       setProfileError(null);
       setAuthState('unauthenticated');
+      setAuthHealth('healthy');
       setLoading(false);
       return;
     }
@@ -792,29 +814,42 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       lastKnownProfileRef.current = null;
       setProfileError(null);
       setAuthState('unauthenticated');
+      setAuthHealth('healthy');
       setLoading(false);
       return;
     }
 
     await supabase.auth.signOut();
-  };
+  }, []);
 
-  const switchActiveOrganization = async (organizationId: string) => {
+  const switchActiveOrganization = useCallback(async (organizationId: string) => {
     if (runtimeAuthMode !== 'supabase' || !supabase) {
       return { error: 'Organization switch is only available in Supabase mode.' };
     }
 
-    const { error } = await supabase.functions.invoke('switch-active-organization', {
-      body: { organization_id: organizationId },
-    });
-
-    if (error) {
-      return { error: error.message };
+    if (orgSwitchLockRef.current) {
+      return { error: 'Organization switch already in progress.' };
     }
 
-    await refreshProfile();
-    return {};
-  };
+    orgSwitchLockRef.current = true;
+    setOrgSwitchInFlight(true);
+
+    try {
+      const { error } = await supabase.functions.invoke('switch-active-organization', {
+        body: { organization_id: organizationId },
+      });
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      await refreshProfile();
+      return {};
+    } finally {
+      orgSwitchLockRef.current = false;
+      setOrgSwitchInFlight(false);
+    }
+  }, [refreshProfile]);
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -826,6 +861,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       activeRole,
       loading,
       authState,
+      authHealth,
+      lastAuthEvent,
+      orgSwitchInFlight,
       profileError,
       isConfigured: isSupabaseConfigured,
       runtimeAuthMode,
@@ -844,6 +882,9 @@ export const AuthProvider = ({ children }: { children?: ReactNode }) => {
       activeRole,
       loading,
       authState,
+      authHealth,
+      lastAuthEvent,
+      orgSwitchInFlight,
       profileError,
       authEventDebug,
       signIn,

@@ -343,11 +343,17 @@ Deno.serve(async (req: Request) => {
 
     const expiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: existingAuthUser } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const existingUser = existingAuthUser.users.find((candidate) => normalizeEmail(candidate.email) === email);
+    // Look up existing user by email via profiles table (avoids listUsers 1000-user limit).
+    // Use filter on lower(email) to match the idx_profiles_org_email index and stay case-insensitive.
+    const { data: existingProfile } = await service
+      .from('profiles')
+      .select('id, email')
+      .filter('email', 'ilike', email)
+      .limit(1)
+      .maybeSingle();
 
-    if (existingUser?.id) {
-      const userId = existingUser.id;
+    if (existingProfile?.id) {
+      const userId = existingProfile.id;
       const { error: upsertMembershipError } = await service.from('organization_memberships').upsert(
         {
           user_id: userId,

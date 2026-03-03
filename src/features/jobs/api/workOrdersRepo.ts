@@ -33,8 +33,12 @@ export async function fetchWorkOrdersByOrganization(input: {
     .eq('organization_id', input.organizationId)
     .order('created_at', { ascending: false });
 
-  if (input.role === 'TECHNICIAN') {
-    query = query.eq('assigned_to_user_id', input.userId ?? '');
+  if (input.role === 'TECHNICIAN' && input.userId) {
+    query = query.or(
+      `assigned_to_user_id.eq.${input.userId},and(status.eq.OPEN,assigned_to_user_id.is.null)`,
+    );
+  } else if (input.role === 'TECHNICIAN') {
+    query = query.eq('id', '00000000-0000-0000-0000-000000000000');
   }
 
   const { data, error } = await query;

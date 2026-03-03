@@ -34,13 +34,13 @@ export const ProfileLoadErrorPage: React.FC<ProfileLoadErrorPageProps> = ({ erro
   const normalizedError = (error ?? '').toUpperCase();
   const actionableHint = (() => {
     if (normalizedError.includes('SESSION_INVALID')) {
-      return 'Sessionen är inte längre giltig. Logga ut och logga in igen.';
+      return t('auth.hint_session_invalid');
     }
     if (normalizedError.includes('MEMBERSHIP_NOT_ACTIVE') || normalizedError.includes('NO ACTIVE ORGANIZATION MEMBERSHIP')) {
-      return 'Ditt konto saknar aktivt medlemskap i vald organisation. Be en admin kontrollera inbjudan och roll.';
+      return t('auth.hint_membership_not_active');
     }
     if (normalizedError.includes('ORG_ROLE_MISMATCH')) {
-      return 'Rollen kunde inte synkas korrekt. Försök igen och kontakta admin om felet kvarstår.';
+      return t('auth.hint_org_role_mismatch');
     }
     return null;
   })();

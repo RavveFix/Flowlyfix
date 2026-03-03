@@ -18,6 +18,7 @@ import { BillingStatus, WorkOrder, WorkOrderPartLog, WorkOrderTimeLog } from '@/
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
 import { useResources } from '@/features/resources/state/ResourceContext';
+import { formatDateKeyForDisplay } from '@/shared/lib/planningDate';
 
 type BillingTabId = 'ready' | 'sent' | 'invoiced';
 
@@ -133,12 +134,14 @@ export const BillingPage: React.FC = () => {
     setEditData((prev) => ({ ...prev, parts_used: [...prev.parts_used, { part_name: '', qty: 1, cost: 0 }] }));
   };
 
-  const formatDate = (value?: string | null) => {
-    if (!value) {
-      return '-';
-    }
-    return new Date(value).toLocaleString(locale);
-  };
+  const formatDate = (value?: string | null) =>
+    formatDateKeyForDisplay(value, locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   const formatMoney = (value: number) => currencyFormatter.format(Number(value || 0));
 

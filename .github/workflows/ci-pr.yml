@@ -114,12 +114,28 @@ jobs:
       PLAYWRIGHT_BASE_URL: http://localhost:3000
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_CALLBACK_ADMIN_EMAIL: ${{ secrets.E2E_CALLBACK_ADMIN_EMAIL }}
+      E2E_CALLBACK_ADMIN_PASSWORD: ${{ secrets.E2E_CALLBACK_ADMIN_PASSWORD }}
+      E2E_STRICT_AUTH_SMOKE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - name: Validate smoke-auth credentials
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_CALLBACK_ADMIN_EMAIL E2E_CALLBACK_ADMIN_PASSWORD; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required smoke-auth secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
       - name: Install dependencies
         run: npm ci
       - name: Install Playwright browser
@@ -145,7 +161,14 @@ jobs:
           cat /tmp/preview.log || true
           exit 1
       - name: Smoke auth suite
-        run: npm run smoke:auth
+        run: |
+          set -euo pipefail
+          npm run smoke:auth | tee /tmp/smoke-auth.raw
+          perl -pe 's/\e\[[0-9;]*[A-Za-z]//g' /tmp/smoke-auth.raw > /tmp/smoke-auth.log
+          if grep -Eq '[[:space:]][1-9][0-9]* skipped' /tmp/smoke-auth.log; then
+            echo "Unexpected skipped tests detected in smoke-auth."
+            exit 1
+          fi
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -175,12 +198,26 @@ jobs:
       PLAYWRIGHT_BASE_URL: http://localhost:3000
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_STRICT_ADMIN_SMOKE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - name: Validate smoke-admin credentials
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required smoke-admin secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
       - name: Install dependencies
         run: npm ci
       - name: Install Playwright browser
@@ -206,7 +243,14 @@ jobs:
           cat /tmp/preview.log || true
           exit 1
       - name: Smoke admin suite
-        run: npm run smoke:admin
+        run: |
+          set -euo pipefail
+          npm run smoke:admin | tee /tmp/smoke-admin.raw
+          perl -pe 's/\e\[[0-9;]*[A-Za-z]//g' /tmp/smoke-admin.raw > /tmp/smoke-admin.log
+          if grep -Eq '[[:space:]][1-9][0-9]* skipped' /tmp/smoke-admin.log; then
+            echo "Unexpected skipped tests detected in smoke-admin."
+            exit 1
+          fi
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -8,13 +8,15 @@ import { Textarea } from '@/shared/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { useResources } from '@/features/resources/state/ResourceContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
+import { dateKeyAtHourToIso, isValidDateKey, PLANNING_TIME_ZONE } from '@/shared/lib/planningDate';
 
 interface CreateTicketModalProps {
   onClose: () => void;
   onJobCreated: (job: WorkOrder) => void;
+  defaultScheduledDateKey?: string;
 }
 
-export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ onClose, onJobCreated }) => {
+export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ onClose, onJobCreated, defaultScheduledDateKey }) => {
   const { t } = useLanguage();
   const { customers, assets, technicians } = useResources();
   const { addJob } = useJobs();
@@ -47,6 +49,11 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ onClose, o
     }
 
     try {
+      const scheduledStart =
+        defaultScheduledDateKey && isValidDateKey(defaultScheduledDateKey)
+          ? dateKeyAtHourToIso(defaultScheduledDateKey, 8, PLANNING_TIME_ZONE)
+          : new Date().toISOString();
+
       const created = await addJob({
         customer_id: formData.customerId,
         asset_id: formData.assetId || null,
@@ -56,7 +63,7 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ onClose, o
         job_type: JobType.FIELD,
         title: formData.description.slice(0, 80) || t('jobs.new_service_case'),
         description: formData.description,
-        scheduled_start: new Date().toISOString(),
+        scheduled_start: scheduledStart,
       });
 
       if (!created) {

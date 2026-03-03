@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Loader2, AlertCircle, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/shared/lib/supabase/client';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 const isSelfSignupEnabled = ((import.meta as any).env?.VITE_ENABLE_SELF_SIGNUP ?? '').toString().toLowerCase() === 'true';
 
 export const SignupPage: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [organizationName, setOrganizationName] = useState('');
   const [adminName, setAdminName] = useState('');
   const [email, setEmail] = useState('');
@@ -19,7 +21,7 @@ export const SignupPage: React.FC = () => {
     event.preventDefault();
 
     if (!supabase) {
-      setError('Supabase is not configured.');
+      setError(t('auth.callback_supabase_not_configured'));
       return;
     }
 
@@ -45,7 +47,7 @@ export const SignupPage: React.FC = () => {
 
     const session = signUpData.session;
     if (!session?.access_token) {
-      setInfo('Kontot skapades. Verifiera e-post och logga in, skapa sedan företag från signup-flödet igen.');
+      setInfo(t('auth.signup_verify_email_hint'));
       setLoading(false);
       return;
     }
@@ -73,10 +75,10 @@ export const SignupPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Self-signup disabled</h1>
-          <p className="text-sm text-slate-500 mb-6">Be din administratör om en inbjudan.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">{t('auth.signup_disabled_title')}</h1>
+          <p className="text-sm text-slate-500 mb-6">{t('auth.signup_disabled_hint')}</p>
           <Link to="/login" className="inline-flex text-sm font-semibold text-slate-700 hover:text-slate-900">
-            Till login
+            {t('auth.signup_go_to_login')}
           </Link>
         </div>
       </div>
@@ -86,8 +88,8 @@ export const SignupPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Skapa företag</h1>
-        <p className="text-sm text-slate-500 mb-6">Registrera admin-konto och företag.</p>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">{t('auth.signup_title')}</h1>
+        <p className="text-sm text-slate-500 mb-6">{t('auth.signup_subtitle')}</p>
 
         {error && (
           <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex gap-2 items-start">
@@ -105,7 +107,7 @@ export const SignupPage: React.FC = () => {
 
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Företagsnamn</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.signup_field_company_name')}</label>
             <input
               type="text"
               value={organizationName}
@@ -116,7 +118,7 @@ export const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Adminnamn</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.signup_field_admin_name')}</label>
             <input
               type="text"
               value={adminName}
@@ -127,7 +129,7 @@ export const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">E-post</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.signup_field_email')}</label>
             <input
               type="email"
               value={email}
@@ -139,7 +141,7 @@ export const SignupPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Lösenord</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.signup_field_password')}</label>
             <input
               type="password"
               value={password}
@@ -156,11 +158,11 @@ export const SignupPage: React.FC = () => {
             className="w-full rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 transition flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-            {loading ? 'Skapar...' : 'Skapa konto'}
+            {loading ? t('auth.signup_creating') : t('auth.signup_create_account')}
           </button>
 
           <Link to="/login" className="inline-flex text-sm font-semibold text-slate-700 hover:text-slate-900">
-            Har redan konto? Logga in
+            {t('auth.signup_already_have_account')}
           </Link>
         </form>
       </div>

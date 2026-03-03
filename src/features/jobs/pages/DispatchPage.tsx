@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Plus, Calendar, User as UserIcon, Clock, MapPin, PanelRight, ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useJobs } from '@/features/jobs/state/JobContext';
@@ -6,6 +7,14 @@ import { JobStatus, JobPriority, WorkOrder, JobType } from '@/shared/types';
 import { TranslationKey } from '@/shared/i18n/translations';
 import { CreateTicketModal } from '@/features/jobs/components/CreateTicketModal';
 import { useResources } from '@/features/resources/state/ResourceContext';
+import {
+  dateKeyAtHourToIso,
+  getTodayDateKeyInTimeZone,
+  isDateKeyInRange,
+  isValidDateKey,
+  PLANNING_TIME_ZONE,
+  toDateKeyInTimeZone,
+} from '@/shared/lib/planningDate';
 
 interface TechnicianState {
   id: string;
@@ -21,8 +30,22 @@ interface JobCardProps {
   onAssignClick: () => void;
 }
 
+type DispatchColumnId = 'unassigned' | 'scheduled' | 'active' | 'completed';
+
+interface DispatchColumn {
+  id: DispatchColumnId;
+  title: string;
+  statusFilter: (status: JobStatus) => boolean;
+  borderColor: string;
+}
+
+type DateInputWithShowPicker = HTMLInputElement & { showPicker?: () => void };
+
+const DEFAULT_PLANNING_HOUR = 8;
+
 export const DispatchPage: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { jobs, updateJob } = useJobs();
   const { technicians: resourceTechnicians, getCustomerById } = useResources();
 
@@ -31,8 +54,40 @@ export const DispatchPage: React.FC = () => {
   const [isTechSidebarOpen, setIsTechSidebarOpen] = useState(true);
   const [filterQuery, setFilterQuery] = useState('');
   const [techAvailability, setTechAvailability] = useState<Record<string, 'available' | 'busy'>>({});
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const dateTriggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const fieldJobs = jobs.filter((job) => job.job_type !== JobType.WORKSHOP);
+  const locale = language === 'sv' ? 'sv-SE' : 'en-US';
+  const todayDateKey = useMemo(() => getTodayDateKeyInTimeZone(PLANNING_TIME_ZONE), []);
+  const dateParam = searchParams.get('date');
+  const selectedDateKey = isValidDateKey(dateParam) ? dateParam : todayDateKey;
+
+  useEffect(() => {
+    if (isValidDateKey(dateParam)) return;
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('date', todayDateKey);
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [dateParam, searchParams, setSearchParams, todayDateKey]);
+
+  const selectedDateLabel = useMemo(() => {
+    if (selectedDateKey === todayDateKey) {
+      return t('common.today');
+    }
+
+    const [year, month, day] = selectedDateKey.split('-').map((segment) => Number(segment));
+    const asUtcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'short',
+      timeZone: PLANNING_TIME_ZONE,
+    }).format(asUtcNoon);
+  }, [locale, selectedDateKey, t, todayDateKey]);
+
+  const fieldJobs = useMemo(
+    () => jobs.filter((job) => job.job_type !== JobType.WORKSHOP),
+    [jobs],
+  );
 
   const technicians = useMemo<TechnicianState[]>(
     () =>
@@ -57,20 +112,83 @@ export const DispatchPage: React.FC = () => {
     }));
   };
 
+  const setSelectedDateInQuery = (nextDateKey: string, replace = false) => {
+    if (!isValidDateKey(nextDateKey)) return;
+    if (nextDateKey === selectedDateKey) return;
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('date', nextDateKey);
+    setSearchParams(nextSearchParams, { replace });
+  };
+
+  const handleDateInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedDateInQuery(event.target.value);
+  };
+
+  const syncDateInputAnchor = () => {
+    const input = dateInputRef.current;
+    const trigger = dateTriggerRef.current;
+    if (!input || !trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    input.style.left = `${Math.max(rect.left, 0)}px`;
+    input.style.top = `${Math.max(rect.top, 0)}px`;
+    input.style.width = `${Math.max(rect.width, 1)}px`;
+    input.style.height = `${Math.max(rect.height, 1)}px`;
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncAnchor = () => {
+      syncDateInputAnchor();
+    };
+
+    syncAnchor();
+    window.addEventListener('resize', syncAnchor);
+    window.addEventListener('scroll', syncAnchor, true);
+    return () => {
+      window.removeEventListener('resize', syncAnchor);
+      window.removeEventListener('scroll', syncAnchor, true);
+    };
+  }, []);
+
+  const openDatePicker = () => {
+    const input = dateInputRef.current as DateInputWithShowPicker | null;
+    if (!input) return;
+
+    syncDateInputAnchor();
+
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
   const handleAssign = (technicianId: string) => {
     if (!assigningJobId) return;
 
-    updateJob(assigningJobId, {
+    const existingJob = jobs.find((job) => job.id === assigningJobId);
+    const updates: Partial<WorkOrder> = {
       status: JobStatus.ASSIGNED,
       assigned_to_user_id: technicianId,
-    });
+    };
+
+    if (existingJob && !existingJob.scheduled_start) {
+      updates.scheduled_start = dateKeyAtHourToIso(selectedDateKey, DEFAULT_PLANNING_HOUR, PLANNING_TIME_ZONE);
+    }
+
+    updateJob(assigningJobId, updates);
 
     setAssigningJobId(null);
   };
 
   const handleJobCreated = (_newJob: WorkOrder) => {};
 
-  const columns = [
+  const columns: DispatchColumn[] = [
     { id: 'unassigned', title: t('dispatch.col.unassigned'), statusFilter: (status: JobStatus) => status === JobStatus.OPEN, borderColor: 'border-orange-400' },
     { id: 'scheduled', title: t('dispatch.col.scheduled'), statusFilter: (status: JobStatus) => status === JobStatus.ASSIGNED, borderColor: 'border-blue-400' },
     {
@@ -81,6 +199,28 @@ export const DispatchPage: React.FC = () => {
     },
     { id: 'completed', title: t('dispatch.col.completed'), statusFilter: (status: JobStatus) => status === JobStatus.DONE, borderColor: 'border-purple-400' },
   ];
+
+  const shouldIncludeJobForSelectedDate = (job: WorkOrder) => {
+    if (!job.scheduled_start) {
+      // OPEN jobs stay visible in backlog and unscheduled legacy rows remain visible as a fail-safe.
+      return true;
+    }
+
+    const startDateKey = toDateKeyInTimeZone(job.scheduled_start, PLANNING_TIME_ZONE);
+    if (!startDateKey) {
+      return true;
+    }
+
+    if (job.scheduled_end) {
+      const endDateKey = toDateKeyInTimeZone(job.scheduled_end, PLANNING_TIME_ZONE);
+      if (!endDateKey) {
+        return startDateKey === selectedDateKey;
+      }
+      return isDateKeyInRange(selectedDateKey, job.scheduled_start, job.scheduled_end, PLANNING_TIME_ZONE);
+    }
+
+    return startDateKey === selectedDateKey;
+  };
 
   return (
     <div className="flex-1 bg-docuraft-bg min-h-full font-sans flex flex-col h-screen overflow-hidden">
@@ -101,9 +241,25 @@ export const DispatchPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 text-slate-600 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={selectedDateKey}
+            onChange={handleDateInputChange}
+            tabIndex={-1}
+            aria-hidden="true"
+            data-testid="dispatch-date-input"
+            className="fixed opacity-0 pointer-events-none"
+          />
+          <button
+            ref={dateTriggerRef}
+            type="button"
+            onClick={openDatePicker}
+            data-testid="dispatch-date-trigger"
+            className="flex items-center gap-2 text-slate-600 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
             <Calendar className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('common.today')}</span>
+            <span className="hidden sm:inline">{selectedDateLabel}</span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
@@ -135,6 +291,7 @@ export const DispatchPage: React.FC = () => {
             {columns.map((column) => {
               const columnJobs = fieldJobs.filter((job) => {
                 if (!column.statusFilter(job.status)) return false;
+                if (!shouldIncludeJobForSelectedDate(job)) return false;
 
                 const customerName = getCustomerById(job.customer_id)?.name?.toLowerCase() ?? '';
                 const q = filterQuery.toLowerCase();
@@ -231,7 +388,13 @@ export const DispatchPage: React.FC = () => {
         </div>
       </div>
 
-      {isCreateModalOpen && <CreateTicketModal onClose={() => setIsCreateModalOpen(false)} onJobCreated={handleJobCreated} />}
+      {isCreateModalOpen && (
+        <CreateTicketModal
+          onClose={() => setIsCreateModalOpen(false)}
+          onJobCreated={handleJobCreated}
+          defaultScheduledDateKey={selectedDateKey}
+        />
+      )}
 
       {assigningJobId && <div className="absolute inset-0 bg-black/5 z-0 pointer-events-none"></div>}
     </div>

@@ -5,6 +5,16 @@ const LOGIN_BUSY_BUTTON_NAME = /Loggar in|Signing in/i;
 const LOGIN_PATH_RE = /\/login(?:\?|$)/;
 const DEBUG_AUTH_HELPER = process.env.DEBUG_E2E_AUTH_HELPER === '1';
 
+interface SessionTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+interface EnsureAuthenticatedOptions {
+  email?: string;
+  password?: string;
+}
+
 async function waitForAuthenticatedShell(page: Page, timeout = 10_000) {
   const navDashboard = page.getByTestId('nav-dashboard');
   const navBilling = page.getByTestId('nav-billing');
@@ -17,6 +27,147 @@ async function waitForAuthenticatedShell(page: Page, timeout = 10_000) {
   // Admin users should always expose billing in sidebar.
   await expect(navBilling).toBeVisible({ timeout });
   return true;
+}
+
+async function readSessionTokens(page: Page): Promise<SessionTokens | null> {
+  return page.evaluate(() => {
+    type SessionCandidate = {
+      access_token?: unknown;
+      refresh_token?: unknown;
+      currentSession?: SessionCandidate;
+      session?: SessionCandidate;
+    };
+
+    const rawValues: string[] = [];
+    const collect = (storage: Storage | null) => {
+      if (!storage) return;
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (!key) continue;
+        const isLegacyKey = /^sb-.*-auth-token$/.test(key);
+        const isFlowlyKey = key.startsWith('flowly-auth');
+        if (!isLegacyKey && !isFlowlyKey) continue;
+        const value = storage.getItem(key);
+        if (typeof value === 'string' && value.trim().length > 0) {
+          rawValues.push(value);
+        }
+      }
+    };
+
+    collect(window.localStorage);
+    try {
+      collect(window.sessionStorage);
+    } catch {
+      // ignore sessionStorage access errors
+    }
+
+    const resolveTokens = (candidate: SessionCandidate | null | undefined) => {
+      if (!candidate) return null;
+      if (typeof candidate.access_token === 'string' && typeof candidate.refresh_token === 'string') {
+        return { accessToken: candidate.access_token, refreshToken: candidate.refresh_token };
+      }
+      return null;
+    };
+
+    for (const raw of rawValues) {
+      try {
+        const parsed = JSON.parse(raw) as SessionCandidate;
+        const direct = resolveTokens(parsed);
+        if (direct) return direct;
+        const currentSession = resolveTokens(parsed.currentSession);
+        if (currentSession) return currentSession;
+        const nestedSession = resolveTokens(parsed.session);
+        if (nestedSession) return nestedSession;
+      } catch {
+        // ignore malformed storage blobs
+      }
+    }
+
+    return null;
+  });
+}
+
+function functionUrl(functionName: string) {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL?.trim() || '';
+  if (!supabaseUrl) return '';
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}`;
+}
+
+async function tryRecoverAdminOrganization(page: Page): Promise<boolean> {
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY?.trim() || '';
+  const supabaseUrl = process.env.VITE_SUPABASE_URL?.trim() || '';
+  if (!anonKey || !supabaseUrl) {
+    return false;
+  }
+
+  const tokens = await readSessionTokens(page);
+  if (!tokens) {
+    return false;
+  }
+
+  const baseUrl = supabaseUrl.replace(/\/$/, '');
+  const userRes = await page.request.get(`${baseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: anonKey,
+      authorization: `Bearer ${tokens.accessToken}`,
+    },
+  });
+  if (!userRes.ok()) {
+    return false;
+  }
+
+  const userPayload = (await userRes.json().catch(() => null)) as { id?: string } | null;
+  const userId = typeof userPayload?.id === 'string' ? userPayload.id : '';
+  if (!userId) {
+    return false;
+  }
+
+  const profileRes = await page.request.get(
+    `${baseUrl}/rest/v1/profiles?select=organization_id,active_organization_id&id=eq.${encodeURIComponent(userId)}`,
+    {
+      headers: {
+        apikey: anonKey,
+        authorization: `Bearer ${tokens.accessToken}`,
+        accept: 'application/json',
+      },
+    },
+  );
+  if (!profileRes.ok()) {
+    return false;
+  }
+
+  const profileRows = (await profileRes.json().catch(() => null)) as Array<{
+    organization_id?: string | null;
+    active_organization_id?: string | null;
+  }> | null;
+  const profile = Array.isArray(profileRows) ? profileRows[0] : null;
+  const targetOrgId =
+    (typeof profile?.organization_id === 'string' && profile.organization_id.trim().length > 0
+      ? profile.organization_id
+      : null) ??
+    (typeof profile?.active_organization_id === 'string' && profile.active_organization_id.trim().length > 0
+      ? profile.active_organization_id
+      : null);
+  if (!targetOrgId) {
+    return false;
+  }
+
+  const switchRes = await page.request.post(functionUrl('switch-active-organization'), {
+    headers: {
+      apikey: anonKey,
+      authorization: `Bearer ${tokens.accessToken}`,
+      'content-type': 'application/json',
+    },
+    data: {
+      organization_id: targetOrgId,
+    },
+  });
+  if (!switchRes.ok()) {
+    return false;
+  }
+
+  await page.goto('/admin/dashboard');
+  return waitForAuthenticatedShell(page, 10_000).catch(() => false);
 }
 
 async function waitForLoginForm(page: Page, timeout = 20_000) {
@@ -127,9 +278,9 @@ async function safeGotoLogin(page: Page) {
   await page.goto('/login');
 }
 
-export async function ensureAuthenticated(page: Page) {
-  const email = process.env.E2E_ADMIN_EMAIL;
-  const password = process.env.E2E_ADMIN_PASSWORD;
+export async function ensureAuthenticated(page: Page, options: EnsureAuthenticatedOptions = {}) {
+  const email = options.email?.trim() || process.env.E2E_ADMIN_EMAIL?.trim() || '';
+  const password = options.password?.trim() || process.env.E2E_ADMIN_PASSWORD?.trim() || '';
 
   if (!email || !password) {
     throw new Error(
@@ -182,6 +333,10 @@ export async function ensureAuthenticated(page: Page) {
       return;
     }
     if (firstState === 'authenticated_non_admin') {
+      const recovered = await tryRecoverAdminOrganization(page);
+      if (recovered) {
+        return;
+      }
       throw new Error('Authenticated as non-admin user (redirected to /field). Set E2E admin credentials.');
     }
 
@@ -198,6 +353,10 @@ export async function ensureAuthenticated(page: Page) {
       return;
     }
     if (secondState === 'authenticated_non_admin') {
+      const recovered = await tryRecoverAdminOrganization(page);
+      if (recovered) {
+        return;
+      }
       throw new Error('Authenticated as non-admin user (redirected to /field). Set E2E admin credentials.');
     }
 
@@ -221,6 +380,10 @@ export async function ensureAuthenticated(page: Page) {
       return;
     }
     if (postLoginState === 'authenticated_non_admin') {
+      const recovered = await tryRecoverAdminOrganization(page);
+      if (recovered) {
+        return;
+      }
       throw new Error('Authenticated as non-admin user (redirected to /field). Set E2E admin credentials.');
     }
 

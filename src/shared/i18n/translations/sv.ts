@@ -40,6 +40,7 @@ export const sv = {
     'common.signing_in': 'Loggar in...',
     'common.close': 'Stäng',
     'common.sign_out': 'Logga ut',
+    'common.session_recovering': 'Sessionen \u00e5terst\u00e4lls...',
 
     // Sidebar
     'nav.dashboard': 'Översikt',
@@ -213,6 +214,9 @@ export const sv = {
     'workshop.tab_parts': 'Material',
     'workshop.no_time': 'Ingen tid loggad än.',
     'workshop.no_parts': 'Inget material loggat än.',
+    'workshop.invalid_minutes': 'Ange ett giltigt antal minuter.',
+    'workshop.invalid_quantity': 'Ange ett giltigt antal.',
+    'workshop.invalid_cost': 'Ange en giltig kostnad.',
     'workshop.placeholder_desc': 'Beskrivning (t.ex. Felsökning)',
     'workshop.placeholder_minutes': 'Minuter',
     'workshop.placeholder_part': 'Artikelnamn / SKU',
@@ -314,6 +318,26 @@ export const sv = {
     'resources.hard_delete': 'Radera permanent',
     'resources.confirm_hard_delete': 'Radera användaren permanent?',
     'resources.user_action_failed': 'Kunde inte utföra användaråtgärden',
+    'resources.team_hint': 'Hantera teamet via inbjudningar: bjud in som administratör eller tekniker.',
+    'resources.pending_invites': 'Väntande inbjudningar',
+    'resources.resend': 'Skicka om',
+    'resources.revoke': 'Återkalla',
+    'resources.expires': 'Utgår',
+    'resources.session_expired': 'Sessionen har löpt ut. Logga in igen och försök på nytt.',
+    'resources.invite_resent': 'Inbjudan skickades om till {email}.',
+    'resources.invite_already_exists': 'Inbjudan till {email} skickades inte om: användaren finns redan eller har redan en aktiv inbjudan.',
+    'resources.invite_revoked': 'Inbjudan har återkallats.',
+    'resources.confirm_role_change': 'Ändra roll',
+    'resources.confirm_role_change_desc': 'Är du säker på att du vill ändra rollen för {name}? Ändringen träder i kraft omedelbart.',
+    'resources.confirm_revoke': 'Återkalla inbjudan',
+    'resources.confirm_revoke_desc': 'Är du säker på att du vill återkalla inbjudan för {email}? Detta kan inte ångras.',
+    'resources.change_role': 'Ändra roll',
+    'resources.invalid_email': 'Ogiltig e-postadress.',
+    'resources.invite_sent_success': 'Inbjudan skickad!',
+    'resources.audit_log': 'Aktivitetslogg',
+    'resources.audit_role_changed': '{actor} ändrade roll för {target} från {from} till {to}',
+    'resources.audit_no_entries': 'Ingen aktivitet registrerad ännu.',
+    'resources.audit_show_more': 'Visa mer',
 
     // Settings
     'settings.title': 'Inställningar',
@@ -361,7 +385,12 @@ export const sv = {
 
     // Mobile / Work Order
     'mobile.my_day': 'Min Dag',
-    'mobile.assigned_jobs': 'Tilldelade Jobb',
+    'mobile.assigned_jobs': 'Mina Jobb',
+    'mobile.available_jobs': 'Lediga Jobb',
+    'mobile.claim_job': 'Ta jobb',
+    'mobile.no_jobs_today': 'Inga jobb idag — njut av ledigheten!',
+    'mobile.no_available_jobs': 'Inga lediga jobb just nu.',
+    'mobile.not_scheduled': 'Ej schemalagd',
     'mobile.simulator_label': 'Interaktiv Tekniker-simulator',
     'wo.start_travel': 'Starta Resa',
     'wo.navigate': 'Navigera till plats',
@@ -400,6 +429,33 @@ export const sv = {
     'auth.config_error_title': 'Auth-konfiguration saknas',
     'auth.config_error_message': 'Miljön saknar giltig auth-konfiguration för Flowlyfix.',
     'auth.config_error_hint': 'Sätt VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY för riktig auth, eller VITE_DEMO_MODE=true för explicit demoläge.',
+
+    // Signup page
+    'auth.signup_title': 'Skapa företag',
+    'auth.signup_subtitle': 'Registrera admin-konto och företag.',
+    'auth.signup_disabled_title': 'Self-signup inaktiverat',
+    'auth.signup_disabled_hint': 'Be din administratör om en inbjudan.',
+    'auth.signup_go_to_login': 'Till login',
+    'auth.signup_field_company_name': 'Företagsnamn',
+    'auth.signup_field_admin_name': 'Adminnamn',
+    'auth.signup_field_email': 'E-post',
+    'auth.signup_field_password': 'Lösenord',
+    'auth.signup_creating': 'Skapar...',
+    'auth.signup_create_account': 'Skapa konto',
+    'auth.signup_already_have_account': 'Har redan konto? Logga in',
+    'auth.signup_verify_email_hint': 'Kontot skapades. Verifiera e-post och logga in, skapa sedan företag från signup-flödet igen.',
+
+    // Auth callback page
+    'auth.callback_completing': 'Slutför inloggning...',
+    'auth.callback_supabase_not_configured': 'Supabase är inte konfigurerat.',
+    'auth.callback_no_session': 'Ingen giltig sessionsdata hittades i länken.',
+    'auth.callback_failed': 'Kunde inte slutföra inloggning via länken.',
+
+    // Profile load error hints
+    'auth.hint_session_invalid': 'Sessionen är inte längre giltig. Logga ut och logga in igen.',
+    'auth.hint_membership_not_active': 'Ditt konto saknar aktivt medlemskap i vald organisation. Be en admin kontrollera inbjudan och roll.',
+    'auth.hint_org_role_mismatch': 'Rollen kunde inte synkas korrekt. Försök igen och kontakta admin om felet kvarstår.',
+
     'notif.button_title': 'Notiser',
     'notif.title': 'Notiser',
     'notif.clear_all': 'Rensa alla',
@@ -429,8 +485,12 @@ export const sv = {
     'notif.billing_ready_message': 'En arbetsorder är klar att fakturera.',
     'notif.billing_validation_failed_title': 'Kan inte slutföra',
     'notif.billing_validation_failed_message': 'Rapport, tid och material krävs innan signering.',
+    'notif.billing_validation_missing_prefix': 'Saknas:',
+    'notif.billing_validation_missing_report': 'rapport',
+    'notif.billing_validation_missing_time_log': 'tidlogg',
+    'notif.billing_validation_missing_parts': 'material',
     'notif.billing_locked_title': 'Fakturering låst',
-    'notif.billing_locked_message': 'Endast READY-arbetsordrar kan redigeras inför fakturering.',
+    'notif.billing_locked_message': 'Endast klarmarkerade arbetsordrar kan redigeras inför fakturering.',
     'notif.billing_transition_invalid_title': 'Ogiltig fakturastatus',
     'notif.billing_transition_invalid_message': 'Denna statusövergång är inte tillåten.',
     'notif.billing_reopened_title': 'Fakturering återöppnad',
@@ -442,4 +502,9 @@ export const sv = {
     'jobs.new_work_order': 'Ny arbetsorder',
     'jobs.new_service_case': 'Nytt serviceärende',
     'jobs.web_request': 'Webbanmälan',
+
+    // Admin layout
+    'admin.active_company': 'Aktivt företag',
+    'admin.switching': 'Byter...',
+    'admin.role': 'Roll',
   } as const;
