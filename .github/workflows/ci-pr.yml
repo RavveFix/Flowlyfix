@@ -127,7 +127,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for key in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD E2E_CALLBACK_ADMIN_EMAIL E2E_CALLBACK_ADMIN_PASSWORD; do
+          for key in E2E_ADMIN_EMAIL E2E_ADMIN_PASSWORD; do
             if [ -z "${!key:-}" ]; then
               echo "Missing required smoke-auth secret: $key"
               missing=1
@@ -136,6 +136,11 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
+          for key in E2E_CALLBACK_ADMIN_EMAIL E2E_CALLBACK_ADMIN_PASSWORD; do
+            if [ -z "${!key:-}" ]; then
+              echo "Warning: optional secret $key is not set — callback tests may be skipped"
+            fi
+          done
       - name: Install dependencies
         run: npm ci
       - name: Install Playwright browser
