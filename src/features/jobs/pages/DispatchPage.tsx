@@ -84,7 +84,10 @@ export const DispatchPage: React.FC = () => {
     }).format(asUtcNoon);
   }, [locale, selectedDateKey, t, todayDateKey]);
 
-  const fieldJobs = jobs.filter((job) => job.job_type !== JobType.WORKSHOP);
+  const fieldJobs = useMemo(
+    () => jobs.filter((job) => job.job_type !== JobType.WORKSHOP),
+    [jobs],
+  );
 
   const technicians = useMemo<TechnicianState[]>(
     () =>

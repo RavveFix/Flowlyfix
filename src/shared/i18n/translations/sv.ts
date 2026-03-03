@@ -449,7 +449,7 @@ export const sv = {
     'notif.billing_validation_failed_title': 'Kan inte slutföra',
     'notif.billing_validation_failed_message': 'Rapport, tid och material krävs innan signering.',
     'notif.billing_locked_title': 'Fakturering låst',
-    'notif.billing_locked_message': 'Endast READY-arbetsordrar kan redigeras inför fakturering.',
+    'notif.billing_locked_message': 'Endast klarmarkerade arbetsordrar kan redigeras inför fakturering.',
     'notif.billing_transition_invalid_title': 'Ogiltig fakturastatus',
     'notif.billing_transition_invalid_message': 'Denna statusövergång är inte tillåten.',
     'notif.billing_reopened_title': 'Fakturering återöppnad',
