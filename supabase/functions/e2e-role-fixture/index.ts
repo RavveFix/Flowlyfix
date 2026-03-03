@@ -56,12 +56,14 @@ Deno.serve(async (req: Request) => {
       return errorResponse(requestId, 'INVALID_INPUT', 'Method not allowed', 405);
     }
 
+    // Auth check first — avoid leaking function existence to unauthenticated requests.
+    const { requesterId } = await requireAdmin(req);
+
     const featureEnabled = (Deno.env.get('ENABLE_E2E_ROLE_FIXTURE') ?? 'false').trim().toLowerCase() === 'true';
     if (!featureEnabled) {
       return errorResponse(requestId, 'FEATURE_DISABLED', 'E2E role fixture is disabled in this environment.', 403);
     }
 
-    const { requesterId } = await requireAdmin(req);
     const service = createServiceClient();
 
     const existingTechMembership = await service
