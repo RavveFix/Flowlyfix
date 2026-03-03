@@ -14,6 +14,7 @@ dist-ssr
 output/
 test-results/
 playwright-report/
+.auth/
 supabase/.temp/
 supabase/.branches/
 
